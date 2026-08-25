@@ -262,6 +262,50 @@ describe('session assembly (today/replay/get)', () => {
     expect(a.body.id).toBe(sessionAId);
   });
 
+  // C3 regresi: dua POST /session/today nyaris bersamaan tidak boleh
+  // menghasilkan dua sesi DAILY IN_PROGRESS untuk user+hari yang sama.
+  // Sebelum fix, findFirst-lalu-create yang tidak atomik membuat kedua
+  // request bisa lolos pengecekan "belum ada sesi terbuka" sebelum salah
+  // satunya sempat membuat baris — advisory lock per-user di dalam satu
+  // $transaction sekarang membuat request kedua menunggu lalu melihat sesi
+  // yang baru dibuat request pertama.
+  it('dua POST /session/today konkuren → hanya SATU sesi DAILY IN_PROGRESS yang tercipta', async () => {
+    const passwordHash = await bcrypt.hash(PASSWORD, 10);
+    const stamp2 = Date.now();
+    const userConc = await prisma.user.create({
+      data: {
+        name: 'P2A User Concurrent',
+        email: `p2a-userconc-${stamp2}@ex.com`,
+        role: 'USER',
+        level: 'DASAR',
+        passwordHash,
+        inviteStatus: 'ACCEPTED',
+      },
+    });
+    const loginConc = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email: userConc.email, password: PASSWORD })
+      .expect(201);
+    const concToken = loginConc.body.accessToken as string;
+
+    const [resA, resB] = await Promise.all([
+      post('/session/today', {}, concToken),
+      post('/session/today', {}, concToken),
+    ]);
+    expect(resA.status).toBe(201);
+    expect(resB.status).toBe(201);
+    expect(resA.body.id).toBe(resB.body.id);
+
+    const sessions = await prisma.session.findMany({
+      where: {
+        userId: userConc.id,
+        kind: 'DAILY',
+        status: 'IN_PROGRESS',
+      },
+    });
+    expect(sessions).toHaveLength(1);
+  });
+
   it('review due diselipkan, maks sesuai config', async () => {
     const res = await post('/session/today', {}, userBToken).expect(201);
     expect(res.body.items.length).toBe(6); // 3 lesson + 3 review (cap dari 5)
@@ -297,6 +341,23 @@ describe('session assembly (today/replay/get)', () => {
     await post('/session/replay', { lessonId: lesson1Id }, userAToken).expect(
       400,
     );
+  });
+
+  // I5: tanpa ValidationPipe, `lessonId` yang hilang/bukan string sebelumnya
+  // bisa lolos ke prisma.lesson.findUnique({ where: { id: lessonId } }) dan
+  // meledak sebagai 500 (bukan-string) alih-alih 400 yang jelas.
+  it('replay tanpa lessonId (body kosong) → 400 "lessonId wajib diisi"', async () => {
+    const res = await post('/session/replay', {}, userAToken).expect(400);
+    expect(res.body.message).toBe('lessonId wajib diisi');
+  });
+
+  it('replay lessonId bukan string (angka) → 400 "lessonId wajib diisi"', async () => {
+    const res = await post(
+      '/session/replay',
+      { lessonId: 12345 },
+      userAToken,
+    ).expect(400);
+    expect(res.body.message).toBe('lessonId wajib diisi');
   });
 });
 
@@ -512,6 +573,33 @@ describe('session assembly - cabang tambahan (replay sukses, penguatan, 409)', (
       },
     });
 
+    // This test's premise is "lesson level habis" (every LIVE lesson at
+    // userE's level already done) — nextLesson() scans ALL LIVE lessons at
+    // MENENGAH, not just lessonE, so any OTHER pre-existing LIVE lesson at
+    // that level (e.g. real demo content like BUS-01/RD-01) would otherwise
+    // also look "not done" and get picked instead of falling through to
+    // reinforcement. Mark every such lesson complete for userE too, so the
+    // "habis" premise actually holds regardless of what else lives at
+    // MENENGAH.
+    const otherMenengahLessons = await prisma.lesson.findMany({
+      where: { level: 'MENENGAH', status: 'LIVE', id: { not: lessonE.id } },
+      include: { items: { where: { status: 'LIVE' } } },
+    });
+    for (const lesson of otherMenengahLessons) {
+      for (const item of lesson.items) {
+        await prisma.attempt.create({
+          data: {
+            userId: userE.id,
+            itemId: item.id,
+            sessionId: seedSessionE.id,
+            answer: 'A',
+            correct: true,
+            firstTry: true,
+          },
+        });
+      }
+    }
+
     const loginD = await request(app.getHttpServer())
       .post('/auth/login')
       .send({ email: userD.email, password: PASSWORD })
@@ -579,5 +667,270 @@ describe('session assembly - cabang tambahan (replay sukses, penguatan, 409)', (
   it('409: level tanpa lesson LIVE dan tanpa riwayat attempt', async () => {
     const res = await post('/session/today', {}, userFToken).expect(409);
     expect(res.body.message).toBe('Belum ada konten untuk levelmu');
+  });
+});
+
+// C2 regression: a LIVE lesson with zero LIVE items (e.g. all its items were
+// retired/unpublished after the lesson itself went LIVE) must never be
+// assembled into a session — not for its own sake (there's nothing to
+// answer) and not as a permanent daily lockout (nextLesson would otherwise
+// keep re-picking it forever since it can never be "completed"). Own prefix
+// (P2A3- / p2a3-) so this describe's fixtures never collide with the two
+// describes above.
+describe('session assembly - C2 regresi: lesson LIVE tanpa item LIVE', () => {
+  let app: INestApplication;
+  let prisma: PrismaService;
+
+  function post(path: string, body: Record<string, unknown>, token: string) {
+    return request(app.getHttpServer())
+      .post(path)
+      .set('Authorization', `Bearer ${token}`)
+      .send(body);
+  }
+
+  let userGToken: string; // MENENGAH: lesson kosong (order 1) + lesson berisi (order 2) -> harus skip ke lesson berisi
+  let userHToken: string; // MAHIR: SATU-SATUNYA lesson LIVE levelnya kosong, tanpa riwayat -> 409
+  let userHId: string;
+
+  let itemNextId: string;
+
+  beforeAll(async () => {
+    const m = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+    app = m.createNestApplication();
+    await app.init();
+    prisma = app.get(PrismaService);
+
+    const passwordHash = await bcrypt.hash(PASSWORD, 10);
+    const stamp = Date.now();
+
+    // --- MENENGAH: lesson kosong duluan (order 1), lesson berisi kedua
+    // (order 2). Sebelum fix, nextLesson() akan memilih lesson kosong
+    // (belum "selesai" karena map-nya vacuously false) dan merakit sesi 0
+    // item; sesudah fix, lesson kosong dilewati dan lesson berisi yang
+    // dipilih.
+    const lessonEmpty = await prisma.lesson.create({
+      data: {
+        code: `P2A3-EMPTY-${stamp}`,
+        title: 'P2A3 Lesson Kosong',
+        topic: 'P2A3 Topic',
+        level: 'MENENGAH',
+        cefr: 'B1',
+        skill: 'VOCABULARY',
+        order: 1,
+        status: 'LIVE',
+      },
+    });
+    // Item DRAFT saja (bukan LIVE) supaya lesson tetap LIVE tapi liveItemCount 0.
+    await prisma.item.create({
+      data: {
+        lessonId: lessonEmpty.id,
+        type: 'PILIHAN_GANDA',
+        prompt: 'Item draft, tidak pernah tayang',
+        options: ['A', 'B', 'C', 'D'],
+        answerKey: 'A',
+        explanation: 'x',
+        order: 1,
+        status: 'DRAFT',
+      },
+    });
+
+    const lessonNext = await prisma.lesson.create({
+      data: {
+        code: `P2A3-NEXT-${stamp}`,
+        title: 'P2A3 Lesson Berisi',
+        topic: 'P2A3 Topic',
+        level: 'MENENGAH',
+        cefr: 'B1',
+        skill: 'VOCABULARY',
+        order: 2,
+        status: 'LIVE',
+      },
+    });
+    const itemNext = await prisma.item.create({
+      data: {
+        lessonId: lessonNext.id,
+        type: 'PILIHAN_GANDA',
+        prompt: 'Item lesson berisi',
+        options: ['A', 'B', 'C', 'D'],
+        answerKey: 'A',
+        explanation: 'x',
+        order: 1,
+        status: 'LIVE',
+      },
+    });
+    itemNextId = itemNext.id;
+
+    // --- MAHIR: satu-satunya lesson LIVE levelnya tidak punya item LIVE
+    // sama sekali -> harus jatuh ke reinforcement (kosong juga, user baru)
+    // -> 409, BUKAN sesi kosong yang dipersist.
+    const lessonMahirEmpty = await prisma.lesson.create({
+      data: {
+        code: `P2A3-MAHIR-EMPTY-${stamp}`,
+        title: 'P2A3 Lesson Mahir Kosong',
+        topic: 'P2A3 Topic',
+        level: 'MAHIR',
+        cefr: 'C1',
+        skill: 'VOCABULARY',
+        order: 1,
+        status: 'LIVE',
+      },
+    });
+    await prisma.item.create({
+      data: {
+        lessonId: lessonMahirEmpty.id,
+        type: 'PILIHAN_GANDA',
+        prompt: 'Item draft mahir, tidak pernah tayang',
+        options: ['A', 'B', 'C', 'D'],
+        answerKey: 'A',
+        explanation: 'x',
+        order: 1,
+        status: 'DRAFT',
+      },
+    });
+
+    const userG = await prisma.user.create({
+      data: {
+        name: 'P2A3 User G',
+        email: `p2a3-userg-${stamp}@ex.com`,
+        role: 'USER',
+        level: 'MENENGAH',
+        passwordHash,
+        inviteStatus: 'ACCEPTED',
+      },
+    });
+    const userH = await prisma.user.create({
+      data: {
+        name: 'P2A3 User H',
+        email: `p2a3-userh-${stamp}@ex.com`,
+        role: 'USER',
+        level: 'MAHIR',
+        passwordHash,
+        inviteStatus: 'ACCEPTED',
+      },
+    });
+    userHId = userH.id;
+
+    // Level scans in nextLesson() aren't scoped to this describe's own
+    // fixtures — any OTHER pre-existing LIVE lesson at the same level (real
+    // demo content like BUS-01/RD-01 at MENENGAH, or leftovers from other
+    // runs) would otherwise also look "not done" to these brand-new users
+    // and could out-rank lessonNext/lessonMahirEmpty in the pick. Mark every
+    // such lesson complete for the relevant user first so the only genuinely
+    // "not done" LIVE lesson left at that level is this describe's own.
+    async function completeOtherLiveLessons(
+      userId: string,
+      level: 'MENENGAH' | 'MAHIR',
+      excludeLessonIds: string[],
+    ) {
+      const others = await prisma.lesson.findMany({
+        where: {
+          level,
+          status: 'LIVE',
+          id: { notIn: excludeLessonIds },
+        },
+        include: { items: { where: { status: 'LIVE' } } },
+      });
+      const itemIds = others.flatMap((l) => l.items.map((i) => i.id));
+      // A lesson with zero LIVE items (e.g. another leftover empty-lesson
+      // fixture) needs no attempt to be "not pickable" — nextLesson's own
+      // C2 filter already skips it. Only create the seed session (and only
+      // for THIS user) when there's actually at least one item to answer,
+      // so this helper never persists a stray session for a user whose
+      // "other lessons" set turned out to be all-empty.
+      if (!itemIds.length) return;
+      const seedSession = await prisma.session.create({
+        data: { userId, date: addDays(todayWIB(), -30), status: 'COMPLETED' },
+      });
+      for (const itemId of itemIds) {
+        await prisma.attempt.create({
+          data: {
+            userId,
+            itemId,
+            sessionId: seedSession.id,
+            answer: 'A',
+            correct: true,
+            firstTry: true,
+          },
+        });
+      }
+    }
+
+    const loginG = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email: userG.email, password: PASSWORD })
+      .expect(201);
+    userGToken = loginG.body.accessToken;
+    const loginH = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email: userH.email, password: PASSWORD })
+      .expect(201);
+    userHToken = loginH.body.accessToken;
+
+    await completeOtherLiveLessons(userG.id, 'MENENGAH', [
+      lessonEmpty.id,
+      lessonNext.id,
+    ]);
+    await completeOtherLiveLessons(userH.id, 'MAHIR', [lessonMahirEmpty.id]);
+  });
+
+  afterAll(async () => {
+    // By-user (not just by-lesson-code): a real session assembled for one
+    // of this describe's own p2a3- users can include items from OTHER
+    // lessons at the same level too (real demo content like BUS-01/RD-01,
+    // via completeOtherLiveLessons() above, or — if nextLesson ever mis-picks
+    // — the demo lesson itself) which don't carry the 'P2A3-' code prefix.
+    // Scoping both attempt and sessionItem cleanup to "belongs to a p2a3-
+    // user" (rather than "references a P2A3- lesson") guarantees every row
+    // blocking this describe's own session/user deletes is gone, without
+    // ever deleting the demo lessons/items themselves.
+    await prisma.attempt.deleteMany({
+      where: { user: { email: { startsWith: 'p2a3-' } } },
+    });
+    await prisma.sessionItem.deleteMany({
+      where: { session: { user: { email: { startsWith: 'p2a3-' } } } },
+    });
+    await prisma.session.deleteMany({
+      where: { user: { email: { startsWith: 'p2a3-' } } },
+    });
+    await prisma.reviewQueue.deleteMany({
+      where: { user: { email: { startsWith: 'p2a3-' } } },
+    });
+    await prisma.item.deleteMany({
+      where: { lesson: { code: { startsWith: 'P2A3-' } } },
+    });
+    await prisma.lesson.deleteMany({
+      where: { code: { startsWith: 'P2A3-' } },
+    });
+    await prisma.user.deleteMany({
+      where: { email: { startsWith: 'p2a3-' } },
+    });
+    await app.close();
+  });
+
+  it('lesson LIVE tanpa item LIVE dilewati -> sesi berisi lesson berikutnya, bukan sesi kosong', async () => {
+    const res = await post('/session/today', {}, userGToken).expect(201);
+    expect(res.body.kind).toBe('DAILY');
+    expect(res.body.items.length).toBe(1);
+    expect(res.body.items[0].itemId).toBe(itemNextId);
+
+    // Sesi yang dipersist juga tidak boleh punya 0 item (bukti langsung
+    // fallback rows.length===0 tidak pernah ke-trigger secara salah di sini).
+    const session = await prisma.session.findUnique({
+      where: { id: res.body.id },
+      include: { items: true },
+    });
+    expect(session?.items.length).toBe(1);
+  });
+
+  it('satu-satunya lesson LIVE levelnya tanpa item LIVE dan tanpa riwayat -> 409, bukan sesi kosong', async () => {
+    const res = await post('/session/today', {}, userHToken).expect(409);
+    expect(res.body.message).toBe('Belum ada konten untuk levelmu');
+
+    const sessions = await prisma.session.findMany({
+      where: { userId: userHId },
+    });
+    expect(sessions.length).toBe(0);
   });
 });

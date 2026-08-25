@@ -135,7 +135,13 @@ export class SummaryService {
     if (!lessons.length) return null;
 
     const completion = await this.session.lessonCompletion(userId, level);
-    const next = lessons.find((l) => !completion.get(l.id));
+    // C2 mirror: keep in sync with SessionService.nextLesson — a LIVE
+    // lesson with zero LIVE items can never be completed, so it must never
+    // surface as "next lesson" here either (it would show a lesson the
+    // session engine will silently skip).
+    const next = lessons
+      .filter((l) => l.items.length > 0)
+      .find((l) => !completion.get(l.id));
     if (!next) return null;
 
     return {

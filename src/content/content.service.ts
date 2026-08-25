@@ -113,8 +113,24 @@ export class ContentService {
     const lesson = await this.prisma.lesson.findUnique({ where: { id } });
     if (!lesson) throw new NotFoundException();
 
-    if (patch.status !== undefined)
+    if (patch.status !== undefined) {
       this.assertTransition(lesson.status, patch.status);
+      // C2 fix: publishing a lesson with zero LIVE items produces a
+      // permanent daily-lockout for any user assigned it (session.service.ts
+      // getOrCreateToday would otherwise persist an empty, uncompletable
+      // session) — reject the DRAFT→LIVE transition itself so this content
+      // state can never be published in the first place.
+      if (patch.status === 'LIVE' && lesson.status !== 'LIVE') {
+        const liveItemCount = await this.prisma.item.count({
+          where: { lessonId: id, status: 'LIVE' },
+        });
+        if (liveItemCount === 0) {
+          throw new BadRequestException(
+            'Lesson tanpa soal LIVE tidak bisa diterbitkan',
+          );
+        }
+      }
+    }
 
     return this.prisma.lesson.update({
       where: { id },

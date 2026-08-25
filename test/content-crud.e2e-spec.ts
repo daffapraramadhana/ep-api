@@ -283,6 +283,67 @@ describe('content CRUD (admin lessons/items)', () => {
     expect(res.body.title).toBe('Lesson CRUD Updated');
   });
 
+  // C2(c) regresi: lesson DRAFT tanpa item LIVE sama sekali tidak boleh bisa
+  // diterbitkan — kalau lolos, session.service.ts getOrCreateToday akan
+  // memilihnya sebagai "lesson berikutnya" dan merakit sesi kosong yang
+  // tidak pernah bisa diselesaikan (lockout permanen).
+  it('PATCH lesson DRAFT→LIVE tanpa item LIVE → 400, lesson lain dengan item LIVE tetap boleh', async () => {
+    const emptyLesson = await prisma.lesson.create({
+      data: {
+        code: `CRUD-EMPTY-${Date.now()}`,
+        title: 'Lesson Tanpa Item LIVE',
+        topic: 'Topic CRUD',
+        level: 'DASAR',
+        cefr: 'A1',
+        skill: 'VOCABULARY',
+        order: 99,
+        status: 'DRAFT',
+      },
+    });
+    await prisma.item.create({
+      data: {
+        lessonId: emptyLesson.id,
+        type: 'PILIHAN_GANDA',
+        prompt: 'Item draft saja',
+        options: ['A', 'B', 'C', 'D'],
+        answerKey: 'A',
+        explanation: 'x',
+        order: 1,
+        status: 'DRAFT',
+      },
+    });
+
+    const res = await request(app.getHttpServer())
+      .patch(`/admin/lessons/${emptyLesson.id}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ status: 'LIVE' })
+      .expect(400);
+    expect(res.body.message).toBe(
+      'Lesson tanpa soal LIVE tidak bisa diterbitkan',
+    );
+
+    const stillDraft = await prisma.lesson.findUniqueOrThrow({
+      where: { id: emptyLesson.id },
+    });
+    expect(stillDraft.status).toBe('DRAFT');
+
+    // lessonId (fixture utama file ini) sudah punya item LIVE (isianItemId,
+    // di-set LIVE di test sebelumnya) — pastikan itu tidak ikut terblokir.
+    await request(app.getHttpServer())
+      .patch(`/admin/lessons/${lessonId}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ status: 'LIVE' })
+      .expect(200);
+
+    const liveLesson = await prisma.lesson.findUniqueOrThrow({
+      where: { id: lessonId },
+    });
+    expect(liveLesson.status).toBe('LIVE');
+
+    await prisma.item.deleteMany({ where: { lessonId: emptyLesson.id } });
+    await prisma.lesson.delete({ where: { id: emptyLesson.id } });
+  });
+
   it('tidak ada route DELETE untuk lessons/items', async () => {
     await request(app.getHttpServer())
       .delete(`/admin/lessons/${lessonId}`)

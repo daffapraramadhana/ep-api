@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Level, Lesson } from '@prisma/client';
+import { Level, Lesson, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import { AppConfigService } from '../common/config.service';
@@ -45,6 +45,12 @@ export function seededShuffle<T>(arr: T[], seedString: string): T[] {
 
 type SessionRow = { itemId: string; source: 'LESSON' | 'REVIEW' };
 
+// Any Prisma client shape with the model delegates the helpers below need —
+// either the app-wide PrismaService or an interactive-transaction client
+// (see C3 fix in getOrCreateToday, and StreakService's identical PrismaLike
+// pattern in ../me/streak.service.ts).
+type Db = Prisma.TransactionClient | PrismaService;
+
 @Injectable()
 export class SessionService {
   constructor(
@@ -53,56 +59,85 @@ export class SessionService {
     private config: AppConfigService,
   ) {}
 
+  /**
+   * C3 fix: find-then-create used to run as two separate round-trips, so two
+   * near-simultaneous POSTs (e.g. React StrictMode double-mount, or a
+   * flaky-network double-tap) could both pass the "no open session" check
+   * before either had created one, producing two IN_PROGRESS DAILY sessions
+   * for the same user+day. Now the whole read-check-create sequence runs
+   * inside one $transaction, guarded by a per-user Postgres advisory xact
+   * lock (`pg_advisory_xact_lock(hashtext(userId))`) taken first — a second
+   * concurrent call blocks on the lock until the first transaction commits,
+   * then re-runs the findFirst and sees the just-created session instead of
+   * racing past it.
+   */
   async getOrCreateToday(userId: string): Promise<SessionView> {
     const today = todayWIB();
-    const open = await this.prisma.session.findFirst({
-      where: { userId, date: today, kind: 'DAILY', status: 'IN_PROGRESS' },
-    });
-    if (open) return this.view(open.id, userId);
 
-    const maxReview = await this.config.getInt('REVIEW_MAX_PER_SESSION');
-    const reviews = await this.prisma.reviewQueue.findMany({
-      where: { userId, dueDate: { lte: today }, item: { status: 'LIVE' } },
-      orderBy: { dueDate: 'asc' },
-      take: maxReview,
-    });
+    const session = await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${userId}))`;
 
-    const lesson = await this.nextLesson(userId);
-    const lessonItems = lesson
-      ? await this.prisma.item.findMany({
-          where: { lessonId: lesson.id, status: 'LIVE' },
-          orderBy: { order: 'asc' },
-        })
-      : [];
+      const open = await tx.session.findFirst({
+        where: { userId, date: today, kind: 'DAILY', status: 'IN_PROGRESS' },
+      });
+      if (open) return open;
 
-    let rows: SessionRow[];
-    if (lesson) {
-      rows = lessonItems.map((i) => ({
-        itemId: i.id,
-        source: 'LESSON' as const,
-      }));
-      for (const r of reviews) {
-        const pos = Math.floor(Math.random() * (rows.length + 1));
-        rows.splice(pos, 0, { itemId: r.itemId, source: 'REVIEW' as const });
+      const maxReview = await this.config.getInt('REVIEW_MAX_PER_SESSION');
+      const reviews = await tx.reviewQueue.findMany({
+        where: { userId, dueDate: { lte: today }, item: { status: 'LIVE' } },
+        orderBy: { dueDate: 'asc' },
+        take: maxReview,
+      });
+
+      const lesson = await this.nextLesson(userId, tx);
+      const lessonItems = lesson
+        ? await tx.item.findMany({
+            where: { lessonId: lesson.id, status: 'LIVE' },
+            orderBy: { order: 'asc' },
+          })
+        : [];
+
+      // C2 fix: `nextLesson` already skips LIVE lessons with zero LIVE
+      // items, but this stays defensive — if the lesson branch somehow
+      // yields no rows (e.g. its LIVE items were retired between the two
+      // queries above), fall through to the reinforcement pool instead of
+      // persisting an empty session that can never be completed.
+      let rows: SessionRow[] = [];
+      if (lesson && lessonItems.length > 0) {
+        rows = lessonItems.map((i) => ({
+          itemId: i.id,
+          source: 'LESSON' as const,
+        }));
+        for (const r of reviews) {
+          const pos = Math.floor(Math.random() * (rows.length + 1));
+          rows.splice(pos, 0, { itemId: r.itemId, source: 'REVIEW' as const });
+        }
       }
-    } else {
-      const hist = await this.reinforcementItems(userId, 10);
-      if (!hist.length)
-        throw new ConflictException('Belum ada konten untuk levelmu');
-      rows = hist.map((itemId) => ({ itemId, source: 'REVIEW' as const }));
-    }
 
-    const created = await this.prisma.$transaction(async (tx) => {
+      if (rows.length === 0) {
+        const hist = await this.reinforcementItems(userId, 10, tx);
+        if (!hist.length)
+          throw new ConflictException('Belum ada konten untuk levelmu');
+        rows = hist.map((itemId) => ({ itemId, source: 'REVIEW' as const }));
+      }
+
       const s = await tx.session.create({ data: { userId, date: today } });
       await tx.sessionItem.createMany({
         data: rows.map((r, i) => ({ sessionId: s.id, ...r, order: i })),
       });
       return s;
     });
-    return this.view(created.id, userId);
+    return this.view(session.id, userId);
   }
 
   async replay(userId: string, lessonId: string): Promise<SessionView> {
+    // gradeAnswer-style guard (mirror answer.service.ts:73-75) — without a
+    // ValidationPipe a missing/non-string lessonId would otherwise reach
+    // prisma.lesson.findUnique({ where: { id: lessonId } }) and blow up as
+    // an uncaught 500 instead of a clean 400.
+    if (typeof lessonId !== 'string') {
+      throw new BadRequestException('lessonId wajib diisi');
+    }
     const lesson = await this.prisma.lesson.findUnique({
       where: { id: lessonId },
     });
@@ -208,15 +243,19 @@ export class SessionService {
     return (await this.lessonCompletionInternal(userId, level)).map;
   }
 
-  private async lessonCompletionInternal(userId: string, level: Level) {
-    const lessons = await this.prisma.lesson.findMany({
+  private async lessonCompletionInternal(
+    userId: string,
+    level: Level,
+    db: Db = this.prisma,
+  ) {
+    const lessons = await db.lesson.findMany({
       where: { level, status: 'LIVE' },
       orderBy: { order: 'asc' },
       include: { items: { where: { status: 'LIVE' }, select: { id: true } } },
     });
     const itemIds = lessons.flatMap((l) => l.items.map((i) => i.id));
     const correctAttempts = itemIds.length
-      ? await this.prisma.attempt.findMany({
+      ? await db.attempt.findMany({
           where: { userId, itemId: { in: itemIds }, correct: true },
           select: { itemId: true },
         })
@@ -232,14 +271,24 @@ export class SessionService {
     return { lessons, map };
   }
 
-  private async nextLesson(userId: string): Promise<Lesson | null> {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+  private async nextLesson(
+    userId: string,
+    db: Db = this.prisma,
+  ): Promise<Lesson | null> {
+    const user = await db.user.findUnique({ where: { id: userId } });
     if (!user?.level) return null;
     const { lessons, map } = await this.lessonCompletionInternal(
       userId,
       user.level,
+      db,
     );
-    return lessons.find((l) => !map.get(l.id)) ?? null;
+    // C2 fix: a LIVE lesson with zero LIVE items can never be completed
+    // (lessonCompletionInternal already maps it to `false`/not-done via
+    // `l.items.length > 0 && ...`), so without this filter it would be
+    // picked forever, assembling an empty session that permanently locks
+    // the user out of their daily session. Skip it and let the next
+    // (non-empty) lesson — or the reinforcement pool — take over.
+    return lessons.filter((l) => l.items.length > 0).find((l) => !map.get(l.id)) ?? null;
   }
 
   /**
@@ -250,8 +299,9 @@ export class SessionService {
   private async reinforcementItems(
     userId: string,
     n: number,
+    db: Db = this.prisma,
   ): Promise<string[]> {
-    const attempts = await this.prisma.attempt.findMany({
+    const attempts = await db.attempt.findMany({
       where: { userId, item: { status: 'LIVE' } },
       select: { itemId: true, correct: true, answeredAt: true },
     });
