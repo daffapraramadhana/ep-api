@@ -45,4 +45,22 @@ describe('invite', () => {
 
   it('token tidak ada → 404', () =>
     request(app.getHttpServer()).get(`/auth/invite/${randomUUID()}`).expect(404));
+
+  it('accept-invite tanpa token tidak boleh mengambil alih akun PENDING lain → 404', async () => {
+    const prisma = app.get(PrismaService);
+    const token = randomUUID();
+    const email = `t-${token}@example.com`;
+    const victim = await prisma.user.create({ data: { name: 'Korban', email, inviteToken: token } });
+
+    await request(app.getHttpServer()).post('/auth/accept-invite')
+      .send({ password: 'rahasia123' }).expect(404);
+
+    const stillPending = await prisma.user.findUnique({ where: { id: victim.id } });
+    expect(stillPending?.inviteStatus).toBe('PENDING');
+    expect(stillPending?.passwordHash).toBeNull();
+    expect(stillPending?.inviteToken).toBe(token);
+
+    await prisma.attempt.deleteMany({ where: { user: { email } } });
+    await prisma.user.delete({ where: { email } });
+  });
 });

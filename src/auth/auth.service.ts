@@ -18,6 +18,8 @@ export class AuthService {
   }
 
   async inviteInfo(token: string) {
+    if (!token || typeof token !== 'string')
+      throw new NotFoundException('Undangan tidak ditemukan atau sudah dipakai');
     const u = await this.prisma.user.findFirst({
       where: { inviteToken: token, inviteStatus: 'PENDING' } });
     if (!u) throw new NotFoundException('Undangan tidak ditemukan atau sudah dipakai');
@@ -25,6 +27,8 @@ export class AuthService {
   }
 
   async acceptInvite(token: string, password: string) {
+    if (!token || typeof token !== 'string')
+      throw new NotFoundException('Undangan tidak ditemukan atau sudah dipakai');
     if (!password || password.length < 8)
       throw new BadRequestException('Password minimal 8 karakter');
     const u = await this.prisma.user.findFirst({
