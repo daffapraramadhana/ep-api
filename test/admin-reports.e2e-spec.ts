@@ -91,6 +91,30 @@ describe('GET/PATCH /admin/reports (Task 3)', () => {
   });
 
   afterAll(async () => {
+    // FK-safe cleanup, scoped to this file's own 'P3R-' / 'p3r-' prefix; never touch other seed data.
+    await prisma.itemReport.deleteMany({
+      where: { user: { email: { startsWith: 'p3r-' } } },
+    });
+    await prisma.reviewQueue.deleteMany({
+      where: { user: { email: { startsWith: 'p3r-' } } },
+    });
+    await prisma.attempt.deleteMany({
+      where: { user: { email: { startsWith: 'p3r-' } } },
+    });
+    await prisma.sessionItem.deleteMany({
+      where: { session: { user: { email: { startsWith: 'p3r-' } } } },
+    });
+    await prisma.session.deleteMany({
+      where: { user: { email: { startsWith: 'p3r-' } } },
+    });
+    await prisma.streakFreeze.deleteMany({
+      where: { user: { email: { startsWith: 'p3r-' } } },
+    });
+    await prisma.item.deleteMany({
+      where: { lesson: { code: { startsWith: 'P3R-' } } },
+    });
+    await prisma.lesson.deleteMany({ where: { code: { startsWith: 'P3R-' } } });
+    await prisma.user.deleteMany({ where: { email: { startsWith: 'p3r-' } } });
     await app.close();
   });
 

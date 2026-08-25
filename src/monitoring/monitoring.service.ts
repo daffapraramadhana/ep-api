@@ -2,7 +2,6 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { Level, SkillTag } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppConfigService } from '../common/config.service';
-import { SessionService } from '../session/session.service';
 import { StreakService } from '../me/streak.service';
 import { addDays, todayWIB, weekStartWIB } from '../common/wib';
 import {
@@ -136,7 +135,6 @@ export class MonitoringService {
     private prisma: PrismaService,
     private config: AppConfigService,
     private streakService: StreakService,
-    private sessionService: SessionService,
   ) {}
 
   async getOverview(): Promise<OverviewView> {
@@ -328,9 +326,18 @@ export class MonitoringService {
     return rows.slice(0, HARDEST_ITEMS_TOP_N);
   }
 
+  /**
+   * Sama seperti buildLessonsDoneMap: "exhausted" (kehabisan konten) = user
+   * sudah menyelesaikan SEMUA lesson LIVE di levelnya (dan level itu punya
+   * >=1 lesson). Dulu ini memanggil sessionService.lessonCompletion per user
+   * per level (2N query serial di landing admin) — sekarang pakai
+   * buildLessonProgress yang sama dgn buildLessonsDoneMap, ~2 query total
+   * utk semua user, exhausted diturunkan dari data batch yang sama.
+   */
   private async buildExhaustedByLevel(
     users: { id: string; level: Level | null; onboardedAt: Date | null }[],
   ): Promise<ExhaustedByLevelView[]> {
+    const { exhaustedMap } = await this.buildLessonProgress(users);
     const out: ExhaustedByLevelView[] = [];
     for (const level of LEVELS) {
       const onboardedAtLevel = users.filter(
@@ -340,15 +347,9 @@ export class MonitoringService {
         out.push({ level, exhaustedPct: 0, users: 0 });
         continue;
       }
-      let exhaustedCount = 0;
-      for (const u of onboardedAtLevel) {
-        const completion = await this.sessionService.lessonCompletion(
-          u.id,
-          level,
-        );
-        const values = [...completion.values()];
-        if (values.length > 0 && values.every(Boolean)) exhaustedCount += 1;
-      }
+      const exhaustedCount = onboardedAtLevel.filter((u) =>
+        exhaustedMap.get(u.id),
+      ).length;
       out.push({
         level,
         exhaustedPct: Math.round(
@@ -412,7 +413,7 @@ export class MonitoringService {
           _max: { completedAt: true },
         }),
         this.buildTrendMap(userIds, today),
-        this.buildLessonsDoneMap(users),
+        this.buildLessonProgress(users).then((r) => r.lessonsDoneMap),
         // StreakService.evaluate per pengguna sengaja TIDAK dipakai di sini —
         // itu lazily MENULIS StreakFreeze row untuk hari-hari gap saat
         // dijalankan, efek samping yang tidak semestinya terjadi hanya karena
@@ -552,20 +553,29 @@ export class MonitoringService {
    * level yang benar-benar dipakai + satu query attempt benar untuk semua
    * user & item sekaligus — bukan N+1 per user (lessonCompletion di
    * SessionService sengaja TIDAK dipakai di sini karena itu satu query-pair
-   * PER user).
+   * PER user). Dipakai juga oleh buildExhaustedByLevel (Task 1 content
+   * health) — exhaustedMap diturunkan dari data batch yang sama, bukan
+   * query terpisah per user per level.
    */
-  private async buildLessonsDoneMap(
+  private async buildLessonProgress(
     users: { id: string; level: Level | null }[],
-  ): Promise<Map<string, number>> {
-    const result = new Map<string, number>();
-    for (const u of users) result.set(u.id, 0);
+  ): Promise<{
+    lessonsDoneMap: Map<string, number>;
+    exhaustedMap: Map<string, boolean>;
+  }> {
+    const lessonsDoneMap = new Map<string, number>();
+    const exhaustedMap = new Map<string, boolean>();
+    for (const u of users) {
+      lessonsDoneMap.set(u.id, 0);
+      exhaustedMap.set(u.id, false);
+    }
 
     const levelsUsed = [
       ...new Set(
         users.map((u) => u.level).filter((l): l is Level => l !== null),
       ),
     ];
-    if (!levelsUsed.length) return result;
+    if (!levelsUsed.length) return { lessonsDoneMap, exhaustedMap };
 
     const lessons = await this.prisma.lesson.findMany({
       where: { level: { in: levelsUsed }, status: 'LIVE' },
@@ -617,9 +627,14 @@ export class MonitoringService {
           done += 1;
         }
       }
-      result.set(u.id, done);
+      lessonsDoneMap.set(u.id, done);
+      // Sama seperti sessionService.lessonCompletion: lesson tanpa item
+      // (items.length === 0) tidak pernah "selesai", jadi level itu tidak
+      // pernah "exhausted" — konsisten dengan semantik lama (map value per
+      // lesson di lessonCompletion juga false utk lesson kosong).
+      exhaustedMap.set(u.id, lvlLessons.length > 0 && done === lvlLessons.length);
     }
-    return result;
+    return { lessonsDoneMap, exhaustedMap };
   }
 
   async getEmployeeDetail(id: string): Promise<EmployeeDetailView> {
