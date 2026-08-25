@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -13,5 +13,15 @@ export class MonitoringController {
   @Get('overview')
   overview() {
     return this.monitoring.getOverview();
+  }
+
+  @Get('employees')
+  employees() {
+    return this.monitoring.getEmployees();
+  }
+
+  @Get('employees/:id')
+  employeeDetail(@Param('id') id: string) {
+    return this.monitoring.getEmployeeDetail(id);
   }
 }

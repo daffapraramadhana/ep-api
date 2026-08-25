@@ -48,6 +48,25 @@ export class StreakService implements StreakEvaluator {
     });
   }
 
+  /**
+   * Read-only variant of `evaluate()` — never lazily creates a StreakFreeze
+   * row. Used by admin monitoring (Task 2): running the full evaluation for
+   * every employee on every admin page view must not have the side effect
+   * of consuming other people's weekly freeze the moment an admin looks at
+   * the dashboard. Freezes that already exist are still recognized (a gap
+   * day is reported as covered iff a freeze row for that week already
+   * points at it) — only NEW freeze creation is suppressed.
+   */
+  async evaluateReadOnly(
+    userId: string,
+    client?: PrismaLike,
+  ): Promise<StreakResult> {
+    return this.compute(client ?? this.prisma, userId, {
+      createFreeze: false,
+      excludeToday: false,
+    });
+  }
+
   async evaluateAfterSession(
     userId: string,
     tx: Prisma.TransactionClient,
