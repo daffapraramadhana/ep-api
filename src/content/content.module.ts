@@ -6,6 +6,7 @@ import { ContentService } from './content.service';
 import { LessonsController } from './lessons.controller';
 import { ItemsController } from './items.controller';
 import { ReportController } from './report.controller';
+import { AdminReportsController } from './admin-reports.controller';
 
 @Module({
   imports: [AuthModule],
@@ -15,6 +16,7 @@ import { ReportController } from './report.controller';
     LessonsController,
     ItemsController,
     ReportController,
+    AdminReportsController,
   ],
   exports: [ImportService, ContentService],
 })
