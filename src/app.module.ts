@@ -9,6 +9,8 @@ import { ContentModule } from './content/content.module';
 import { CommonModule } from './common/common.module';
 import { SessionModule } from './session/session.module';
 import { MeModule } from './me/me.module';
+import { JourneyModule } from './journey/journey.module';
+import { ProgressModule } from './progress/progress.module';
 
 @Module({
   imports: [
@@ -21,6 +23,8 @@ import { MeModule } from './me/me.module';
     CommonModule,
     SessionModule,
     MeModule,
+    JourneyModule,
+    ProgressModule,
   ],
   controllers: [AppController],
   providers: [],
