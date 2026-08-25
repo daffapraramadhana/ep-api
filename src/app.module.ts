@@ -11,6 +11,7 @@ import { SessionModule } from './session/session.module';
 import { MeModule } from './me/me.module';
 import { JourneyModule } from './journey/journey.module';
 import { ProgressModule } from './progress/progress.module';
+import { MonitoringModule } from './monitoring/monitoring.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { ProgressModule } from './progress/progress.module';
     MeModule,
     JourneyModule,
     ProgressModule,
+    MonitoringModule,
   ],
   controllers: [AppController],
   providers: [],

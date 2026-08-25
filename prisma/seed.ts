@@ -7,6 +7,7 @@ const CONFIG: Record<string, string> = {
   XP_FIRST_TRY: '10', XP_RETRY: '2', XP_SESSION_COMPLETE: '20',
   XP_PERFECT_SESSION: '15', XP_DAILY_REVIEW_CAP: '100',
   REVIEW_MAX_PER_SESSION: '3',
+  MONITOR_INACTIVE_DAYS: '5',
 };
 
 async function main() {
