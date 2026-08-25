@@ -250,8 +250,12 @@ describe('POST /session/:id/answer (grading, xp, review queue, completion)', () 
       // item1 (MC) benar first-try, item2 (ISIAN) SALAH first-try lalu retry
       // benar, item3 (SUSUN) benar first-try → 2/3 first-try-in-session benar.
       expect(res.body.summary.accuracyFirstTry).toBe(67);
-      expect(typeof res.body.summary.streak).toBe('number');
-      expect(res.body.summary.streakChanged).toBe(false);
+      // userA is fresh (no prior DAILY-completed sessions) with the default
+      // dailyTargetSessions=1, so this very completion is what makes today
+      // "met" for the first time: streak becomes exactly 1 and streakChanged
+      // is true (real StreakService, not the Task-5 stub).
+      expect(res.body.summary.streak).toBe(1);
+      expect(res.body.summary.streakChanged).toBe(true);
       expect(res.body.summary.milestone).toBeNull();
 
       const session = await prisma.session.findUnique({

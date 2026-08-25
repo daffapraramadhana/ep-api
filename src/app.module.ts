@@ -8,9 +8,20 @@ import { MediaModule } from './media/media.module';
 import { ContentModule } from './content/content.module';
 import { CommonModule } from './common/common.module';
 import { SessionModule } from './session/session.module';
+import { MeModule } from './me/me.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule, UsersModule, StorageModule, MediaModule, ContentModule, CommonModule, SessionModule],
+  imports: [
+    PrismaModule,
+    AuthModule,
+    UsersModule,
+    StorageModule,
+    MediaModule,
+    ContentModule,
+    CommonModule,
+    SessionModule,
+    MeModule,
+  ],
   controllers: [AppController],
   providers: [],
 })

@@ -17,12 +17,19 @@ import { gradeAnswer } from './grading';
 const H7 = 7 * 3600_000;
 
 /**
- * TODO(Task 5): session.module.ts swaps this stub provider for the real
- * streak/milestone computation. answer.service.ts only depends on the
- * interface + STREAK_EVALUATOR token, so the swap needs no change here.
+ * Task 5 wires the real StreakService (src/me/streak.service.ts) as the
+ * STREAK_EVALUATOR provider. It takes `tx` explicitly — not just userId —
+ * because this is invoked from INSIDE the $transaction below, right after
+ * marking the session COMPLETED but before the transaction commits. A query
+ * through a separate PrismaService connection wouldn't see that uncommitted
+ * completion yet, so the streak/changed/milestone computation must run
+ * against the same transaction client to count today's session correctly.
  */
 export interface StreakEvaluator {
-  evaluateAfterSession(userId: string): Promise<{
+  evaluateAfterSession(
+    userId: string,
+    tx: Prisma.TransactionClient,
+  ): Promise<{
     streak: number;
     changed: boolean;
     milestone: 7 | 30 | 100 | null;
@@ -240,8 +247,10 @@ export class AnswerService {
           },
         });
 
-        const streakResult =
-          await this.streakEvaluator.evaluateAfterSession(userId);
+        const streakResult = await this.streakEvaluator.evaluateAfterSession(
+          userId,
+          tx,
+        );
         summary = {
           xpSession: bonusXp,
           accuracyFirstTry,
