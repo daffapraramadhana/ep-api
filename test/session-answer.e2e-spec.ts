@@ -441,7 +441,12 @@ describe('POST /session/:id/answer (grading, xp, review queue, completion)', () 
   });
 
   describe('review_queue: progres benar berturut-turut (SM-2-ish)', () => {
-    it('benar pertama di REVIEW: correctStreak 0→1, dueDate = besok', async () => {
+    // Ladder ruling: the "due tomorrow" set when an item was first answered
+    // wrong already counts as rung 1 of [1,3,7]. So a CORRECT review answer
+    // indexes the ladder by the POST-increment streak: first correct review
+    // (streak 0→1) lands on rung 2 (+3 days), second (1→2) on rung 3
+    // (+7 days), third (2→3) masters the item (row deleted).
+    it('benar pertama di REVIEW: correctStreak 0→1, dueDate = +3 hari', async () => {
       const userE = await makeUser('P2B User E', `p2b-usere-${stamp}@ex.com`);
       const lesson = await makeLesson(`P2B-L5-${stamp}`, 5);
       const item = await prisma.item.create({
@@ -487,7 +492,57 @@ describe('POST /session/:id/answer (grading, xp, review queue, completion)', () 
       });
       expect(rq?.correctStreak).toBe(1);
       expect(rq?.dueDate.toISOString()).toBe(
-        addDays(todayWIB(), 1).toISOString(),
+        addDays(todayWIB(), 3).toISOString(),
+      );
+    });
+
+    it('benar kedua di REVIEW: correctStreak 1→2, dueDate = +7 hari', async () => {
+      const userG = await makeUser('P2B User G', `p2b-userg-${stamp}@ex.com`);
+      const lesson = await makeLesson(`P2B-L7-${stamp}`, 7);
+      const item = await prisma.item.create({
+        data: {
+          lessonId: lesson.id,
+          type: 'PILIHAN_GANDA',
+          prompt: 'Review streak item 2',
+          options: ['A', 'B', 'C', 'D'],
+          answerKey: 'A',
+          explanation: 'x',
+          order: 1,
+          status: 'LIVE',
+        },
+      });
+      await prisma.reviewQueue.create({
+        data: {
+          userId: userG.id,
+          itemId: item.id,
+          dueDate: todayWIB(),
+          correctStreak: 1,
+        },
+      });
+      const session = await prisma.session.create({
+        data: { userId: userG.id, date: todayWIB(), status: 'IN_PROGRESS' },
+      });
+      await prisma.sessionItem.create({
+        data: {
+          sessionId: session.id,
+          itemId: item.id,
+          source: 'REVIEW',
+          order: 0,
+        },
+      });
+
+      await post(
+        `/session/${session.id}/answer`,
+        { itemId: item.id, answer: 'a' },
+        userG.token,
+      ).expect(201);
+
+      const rq = await prisma.reviewQueue.findUnique({
+        where: { userId_itemId: { userId: userG.id, itemId: item.id } },
+      });
+      expect(rq?.correctStreak).toBe(2);
+      expect(rq?.dueDate.toISOString()).toBe(
+        addDays(todayWIB(), 7).toISOString(),
       );
     });
 

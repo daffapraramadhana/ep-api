@@ -173,13 +173,18 @@ export class AnswerService {
           where: { userId_itemId: { userId, itemId } },
         });
         if (rq) {
+          // Ladder is POST-increment: the initial "due tomorrow" (set when
+          // the item was first answered wrong, above) already counts as the
+          // "1" rung, so the first correct-in-review answer lands on rung 2
+          // (+3 days), the second on rung 3 (+7 days), and the third (streak
+          // >=3) masters the item out of the queue entirely.
           const newStreak = rq.correctStreak + 1;
           if (newStreak >= 3) {
             await tx.reviewQueue.delete({
               where: { userId_itemId: { userId, itemId } },
             });
           } else {
-            const days = [1, 3, 7][Math.min(rq.correctStreak, 2)];
+            const days = [1, 3, 7][Math.min(newStreak, 2)];
             await tx.reviewQueue.update({
               where: { userId_itemId: { userId, itemId } },
               data: {
