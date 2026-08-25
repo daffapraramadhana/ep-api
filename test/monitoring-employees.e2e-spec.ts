@@ -380,6 +380,13 @@ describe('GET /admin/monitoring/employees (Task 2)', () => {
         admin.token,
       ).expect(404);
 
+      // --- id milik ADMIN -> 404 juga (detail scoped ke role USER, simetris
+      // dengan list yang cuma berisi role USER — id admin bukan baris di
+      // sana, jadi detail-nya pun harus 404, bukan 200). ---
+      await get(`/admin/monitoring/employees/${admin.id}`, admin.token).expect(
+        404,
+      );
+
       // --- USER -> 403 pada detail juga ---
       await get(
         `/admin/monitoring/employees/${userZeta.id}`,

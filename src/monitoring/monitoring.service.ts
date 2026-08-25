@@ -623,8 +623,10 @@ export class MonitoringService {
   }
 
   async getEmployeeDetail(id: string): Promise<EmployeeDetailView> {
-    const user = await this.prisma.user.findUnique({
-      where: { id },
+    // Scoped ke karyawan (role: 'USER') seperti getEmployees() — simetris:
+    // id milik ADMIN (bukan baris di list employees) juga 404, bukan 200.
+    const user = await this.prisma.user.findFirst({
+      where: { id, role: 'USER' },
       select: {
         name: true,
         email: true,
