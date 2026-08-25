@@ -148,38 +148,38 @@ export class ContentService {
     if (patch.status !== undefined)
       this.assertTransition(item.status, patch.status);
 
-    const merged = { ...item, ...patch };
+    // `type` is not part of ItemPatch and is not persisted below, but
+    // without a whitelisting ValidationPipe a caller could still smuggle it
+    // into the request body. If it leaked into `merged` it would change
+    // which TYPE_TO_TEMPLATE rules buildRawRow/validateRows run under —
+    // drop it so revalidation always uses the item's real, persisted type.
+    const { type: _smuggledType, ...safePatch } = patch as ItemPatch & {
+      type?: unknown;
+    };
+
+    const merged = { ...item, ...safePatch };
 
     // Bangun RawRow tunggal dari state hasil merge untuk validasi ulang via validateRows.
     const raw = this.buildRawRow(merged, item.lesson);
     const mediaNames = new Set(await this.storage.listNames());
-    const { errors } = validateRows([raw], mediaNames);
+    const { valid, errors } = validateRows([raw], mediaNames);
     if (errors.length) throw new BadRequestException(errors[0].message);
+    const normalized = valid[0];
 
+    // Persist from the validator's NormalizedRow, not the raw patch — this
+    // is what stores normalization side effects (e.g. answerKey unshifted
+    // into acceptedAnswers for isian) instead of silently dropping them.
     return this.prisma.item.update({
       where: { id },
       data: {
-        ...(patch.prompt !== undefined ? { prompt: patch.prompt } : {}),
-        ...(patch.options !== undefined
-          ? {
-              options:
-                (patch.options as Prisma.InputJsonValue) ?? Prisma.DbNull,
-            }
-          : {}),
-        ...(patch.answerKey !== undefined
-          ? { answerKey: patch.answerKey }
-          : {}),
-        ...(patch.acceptedAnswers !== undefined
-          ? { acceptedAnswers: patch.acceptedAnswers }
-          : {}),
-        ...(patch.explanation !== undefined
-          ? { explanation: patch.explanation }
-          : {}),
-        ...(patch.mediaFile !== undefined
-          ? { mediaFile: patch.mediaFile }
-          : {}),
-        ...(patch.passage !== undefined ? { passage: patch.passage } : {}),
-        ...(patch.status !== undefined ? { status: patch.status } : {}),
+        prompt: normalized.prompt,
+        options: (normalized.options as Prisma.InputJsonValue) ?? Prisma.DbNull,
+        answerKey: normalized.answerKey,
+        acceptedAnswers: normalized.acceptedAnswers,
+        explanation: normalized.explanation,
+        mediaFile: normalized.mediaFile,
+        passage: normalized.passage,
+        ...(safePatch.status !== undefined ? { status: safePatch.status } : {}),
       },
     });
   }

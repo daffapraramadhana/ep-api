@@ -5,6 +5,8 @@ import { StorageService } from './storage.service';
 
 @Injectable()
 export class LocalStorageService extends StorageService {
+  readonly servesLocally = true;
+
   private dir = process.env.STORAGE_DIR ?? './storage';
 
   private safe(name: string) {
@@ -28,7 +30,11 @@ export class LocalStorageService extends StorageService {
 
   async listNames(): Promise<string[]> {
     await fs.mkdir(this.dir, { recursive: true });
-    return fs.readdir(this.dir);
+    const names = await fs.readdir(this.dir);
+    // Skip hidden/system files (.DS_Store, .gitkeep, ...) — they're not
+    // media and would otherwise show up in /admin/media and fail stat()
+    // assumptions elsewhere.
+    return names.filter((n) => !n.startsWith('.'));
   }
 
   async stat(name: string) {

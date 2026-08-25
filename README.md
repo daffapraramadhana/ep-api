@@ -1,98 +1,101 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# English App — API
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Backend for the Daily English Learning Platform: a NestJS + Prisma
+(PostgreSQL) service that owns all business logic (grading, XP, spaced
+review, content import/CRUD, auth). `apps/web` is deliberately a thin
+view layer on top of this API — see the workspace spec for the full
+product/architecture rationale:
+`../../docs/superpowers/specs/2026-08-25-english-app-foundation-design.md`
+(if this checkout doesn't have that path, it lives in the sibling
+workspace repo, `english-app/docs/superpowers/specs/`). The implementation
+plan and per-task reports live under
+`../../.superpowers/sdd/2026-08-25-fase-1-fondasi-dan-admin/` in that
+same workspace repo.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
-
-## Description
-
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
-
-## Project setup
+## Environment setup
 
 ```bash
-$ npm install
+cp .env.example .env
 ```
 
-## Compile and run the project
+| Variable | Purpose |
+|---|---|
+| `DATABASE_URL` | Postgres connection string, e.g. `postgresql://app:app@localhost:5432/english_app`. |
+| `JWT_SECRET` | Signs auth tokens. Any long random string locally; a real secret in production. |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Seeded admin login (see `prisma/seed.ts`). |
+| `STORAGE_DRIVER` | `local` (default) or `s3`. |
+| `STORAGE_DIR` | Local driver only — where uploaded media is written/read (default `./storage`). |
+| `S3_*` (`S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_PUBLIC_URL`, optional `S3_REGION`) | Required only when `STORAGE_DRIVER=s3`. The app fails fast at boot (`src/env-check.ts`) if any are missing while the S3 driver is selected. |
+| `WEB_ORIGIN` | Allowed CORS origin for the web app, e.g. `http://localhost:3000`. |
+| `PORT` | HTTP port (default `3001`). |
+
+`DATABASE_URL`, `JWT_SECRET`, and `WEB_ORIGIN` are always required —
+the app exits immediately with a clear message listing what's missing
+if any of them (or the S3 set, when applicable) aren't set. This is
+deliberate: better a loud crash at boot than CORS silently failing open
+or an obscure S3 SDK error on the first upload.
+
+## Local Postgres
+
+A local Postgres instance is required (no Docker needed for day-to-day
+development). Create the role and database `DATABASE_URL` above points
+at, e.g.:
 
 ```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+createuser -s app                 # or: psql -c "CREATE ROLE app LOGIN PASSWORD 'app' SUPERUSER;"
+createdb -O app english_app
 ```
 
-## Run tests
+Adjust to match whatever `DATABASE_URL` you put in `.env`.
+
+## Install, migrate, seed
 
 ```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+npm install
+npx prisma migrate dev   # applies migrations, prompts for a name on schema changes
+npx prisma db seed       # idempotent: config rows + ADMIN_EMAIL/ADMIN_PASSWORD admin user
 ```
+
+`prisma db seed` runs `prisma/seed.ts` via `ts-node`, wired through
+`prisma.config.ts`. In production the same seed logic runs compiled
+(`dist/prisma/seed.js`, no ts-node) from `docker-entrypoint.sh` on every
+container boot — see `../../infra/README.md` §3.
+
+## Run
+
+```bash
+npm run start:dev   # watch mode, local development
+npm run start       # single run, no watch
+npm run build        # nest build → dist/
+npm run start:prod   # node dist/src/main.js — what the Docker image runs
+```
+
+## Test
+
+```bash
+npm run test         # unit tests (jest, no external services)
+npm run test:e2e     # e2e tests (supertest against a real Nest app instance)
+npm run test:cov     # unit tests with coverage
+```
+
+**`test:e2e` needs a live Postgres** matching `.env`'s `DATABASE_URL`,
+migrated and seeded (see above) — it exercises real HTTP requests
+(auth, content CRUD, media upload, imports) against real Prisma
+queries, not mocks.
+
+## A note on `prisma` as a runtime dependency
+
+`prisma` (the CLI package) is listed in `dependencies`, not
+`devDependencies` — **do not move it to devDependencies.** The
+production Docker image's entrypoint runs `npx prisma migrate deploy`
+at container boot to apply pending migrations before the server starts
+(see `docker-entrypoint.sh`, `Dockerfile`'s `prod-deps` stage which
+installs with `--omit=dev`). If `prisma` were a devDependency it would
+be absent from that stage and the container would fail to boot.
 
 ## Deployment
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+This service is deployed via the workspace's `infra/` repo
+(`docker-compose.prod.yml` + `Dockerfile` + `docker-entrypoint.sh`) —
+see `../../infra/README.md` for the full runbook (env contract, deploy
+steps, backups, JWT rotation, known limitations).

@@ -231,6 +231,49 @@ describe('content CRUD (admin lessons/items)', () => {
     expect(res.body.message).toBeDefined();
   });
 
+  it('PATCH isian answerKey saja → acceptedAnswers ternormalisasi tersimpan di DB', async () => {
+    const before = await prisma.item.findUniqueOrThrow({
+      where: { id: isianItemId },
+    });
+    expect(before.acceptedAnswers).toEqual(['am', 'is']);
+
+    const res = await request(app.getHttpServer())
+      .patch(`/admin/items/${isianItemId}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ answerKey: 'was' })
+      .expect(200);
+    expect(res.body.answerKey).toBe('was');
+    expect(res.body.acceptedAnswers).toEqual(['was', 'am', 'is']);
+
+    const item = await prisma.item.findUniqueOrThrow({
+      where: { id: isianItemId },
+    });
+    expect(item.answerKey).toBe('was');
+    expect(item.acceptedAnswers).toEqual(['was', 'am', 'is']);
+  });
+
+  it('PATCH tidak bisa menyelundupkan `type` untuk mengubah aturan validasi', async () => {
+    // `type` bukan bagian ItemPatch — mengirimnya tidak boleh mengubah tipe
+    // item yang dipakai untuk revalidasi (mis. lolos validasi pilihan_ganda
+    // padahal item sebenarnya isian).
+    const before = await prisma.item.findUniqueOrThrow({
+      where: { id: isianItemId },
+    });
+    expect(before.type).toBe('ISIAN');
+
+    await request(app.getHttpServer())
+      .patch(`/admin/items/${isianItemId}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ type: 'PILIHAN_GANDA', explanation: 'Tetap isian.' })
+      .expect(200);
+
+    const item = await prisma.item.findUniqueOrThrow({
+      where: { id: isianItemId },
+    });
+    expect(item.type).toBe('ISIAN');
+    expect(item.explanation).toBe('Tetap isian.');
+  });
+
   it('PATCH lesson title/topic/order/status subset berhasil', async () => {
     const res = await request(app.getHttpServer())
       .patch(`/admin/lessons/${lessonId}`)

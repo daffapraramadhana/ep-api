@@ -15,6 +15,8 @@ import { StorageService } from './storage.service';
  */
 @Injectable()
 export class S3StorageService extends StorageService {
+  readonly servesLocally = false;
+
   private client = new S3Client({
     region: process.env.S3_REGION ?? 'auto',
     endpoint: process.env.S3_ENDPOINT,

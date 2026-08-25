@@ -13,11 +13,16 @@ async function main() {
   for (const [key, value] of Object.entries(CONFIG))
     await prisma.config.upsert({ where: { key }, update: {}, create: { key, value } });
   const email = process.env.ADMIN_EMAIL!;
+  const passwordHash = await bcrypt.hash(process.env.ADMIN_PASSWORD!, 10);
   await prisma.user.upsert({
-    where: { email }, update: {},
+    where: { email },
+    // Rotate the password hash on every boot too, so changing ADMIN_PASSWORD
+    // in .env.prod and redeploying actually takes effect for an existing
+    // admin row (upsert's `update: {}` previously left it untouched).
+    update: { passwordHash },
     create: {
       name: 'Admin', email, role: 'ADMIN', inviteStatus: 'ACCEPTED',
-      passwordHash: await bcrypt.hash(process.env.ADMIN_PASSWORD!, 10),
+      passwordHash,
     },
   });
 }
