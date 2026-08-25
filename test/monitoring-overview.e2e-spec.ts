@@ -133,7 +133,7 @@ describe('GET /admin/monitoring/overview (Task 1)', () => {
   });
 
   describe('overview: totals, activitySeries, hardestItems, openReports, RolesGuard', () => {
-    it('403 untuk role USER + totals per definisi (delta) + activitySeries 28 hari + hardestItems + openReports', async () => {
+    it('403 untuk role USER + totals per definisi (delta) + batas jendela aktif 6 vs 7 hari + activitySeries 28 hari + hardestItems + openReports', async () => {
       const admin = await makeUser({
         name: 'P3M Admin',
         email: `p3m-admin-${stamp}@ex.com`,
@@ -202,30 +202,74 @@ describe('GET /admin/monitoring/overview (Task 1)', () => {
         data: { userId: userA.id, itemId: hardItem.id, note: 'Jawaban kunci salah' },
       });
 
+      // Snapshot TEPAT sebelum menambah user batas-jendela-aktif D & E, agar
+      // kontribusi keduanya bisa diisolasi dari A/B/C lewat delta terpisah.
+      const boundaryBefore = await get(
+        '/admin/monitoring/overview',
+        admin.token,
+      ).expect(200);
+
+      // User D: batas jendela "aktif" (spec §3, dikoreksi di §8) — selisih
+      // hari TEPAT 6 (hari ini - 6) dan TIDAK ADA sesi lain -> MASIH masuk
+      // jendela aktif (selisih 0-6) -> terhitung aktif. Karena threshold
+      // MONITOR_INACTIVE_DAYS seed = 5 dan 6 >= 5, user ini juga jatuh ke
+      // status butuh_perhatian (dua hal ini independen: window "aktif" §3
+      // vs ambang butuh_perhatian; kebetulan tumpang tindih di seed ini).
+      const userD = await makeUser({
+        name: 'P3M User D (boundary aktif 6 hari)',
+        email: `p3m-userd-${stamp}@ex.com`,
+        onboardedAt: addDays(today, -30),
+      });
+      await makeCompletedSession(userD.id, addDays(today, -6));
+
+      // User E: satu hari DI LUAR jendela aktif — selisih TEPAT 7 -> TIDAK
+      // terhitung aktif. Tetap butuh_perhatian karena 7 >= threshold (5).
+      const userE = await makeUser({
+        name: 'P3M User E (boundary aktif 7 hari)',
+        email: `p3m-usere-${stamp}@ex.com`,
+        onboardedAt: addDays(today, -30),
+      });
+      await makeCompletedSession(userE.id, addDays(today, -7));
+
       await get('/admin/monitoring/overview', userC.token).expect(403);
 
+      // --- activitySeries: bracket the request with an independent DB count
+      // taken just BEFORE and just AFTER, and assert the endpoint's own sum
+      // falls within that inclusive range. A tighter `toBe` against a count
+      // taken strictly AFTER the request is racy under real parallel e2e
+      // load (another suite's session can land in the split-second gap
+      // between the endpoint's internal query and our separate verification
+      // query) — this happened in practice (`expected 21, received 20`)
+      // when the full e2e suite ran concurrently. Sessions are only ever
+      // ADDED by other suites during a run (each file's own afterAll only
+      // deletes its OWN prefixed rows, at the very end of its run), so the
+      // true count can only move up between our two bracketing reads.
+      const windowStart = addDays(today, -27);
+      const sessionCountQuery = () =>
+        prisma.session.count({
+          where: {
+            kind: 'DAILY',
+            status: 'COMPLETED',
+            date: { gte: windowStart, lte: today },
+          },
+        });
+      const sessionsCountBefore = await sessionCountQuery();
       const after = await get('/admin/monitoring/overview', admin.token).expect(
         200,
       );
+      const sessionsCountAfter = await sessionCountQuery();
       const body = after.body;
 
-      // --- activitySeries ---
       expect(body.activitySeries).toHaveLength(28);
-      const windowStart = addDays(today, -27);
-      const expectedTotalSessions = await prisma.session.count({
-        where: {
-          kind: 'DAILY',
-          status: 'COMPLETED',
-          date: { gte: windowStart, lte: today },
-        },
-      });
       const sumSeries = body.activitySeries.reduce(
-        (acc: number, d: { count: number }) => acc + d.count,
+        (acc: number, d: { sessionsCompleted: number }) =>
+          acc + d.sessionsCompleted,
         0,
       );
-      expect(sumSeries).toBe(expectedTotalSessions);
+      expect(sumSeries).toBeGreaterThanOrEqual(sessionsCountBefore);
+      expect(sumSeries).toBeLessThanOrEqual(sessionsCountAfter);
 
-      // --- totals: delta vs baseline, per definisi ---
+      // --- totals: delta vs baseline, per definisi (keseluruhan A..E) ---
       // Dunia nyata: suite e2e lain berjalan BERSAMAAN (worker paralel Jest,
       // DB Postgres yang sama) dan boleh menambah user/session/report milik
       // mereka sendiri kapan saja selama window ini — itu HANYA bisa
@@ -235,11 +279,18 @@ describe('GET /admin/monitoring/overview (Task 1)', () => {
       // flaky saat suite penuh berjalan bersamaan).
       const b = before.body.totals;
       const a = body.totals;
-      expect(a.employees - b.employees).toBeGreaterThanOrEqual(3); // A, B, C
+      expect(a.employees - b.employees).toBeGreaterThanOrEqual(5); // A, B, C, D, E
       expect(a.onTrack - b.onTrack).toBeGreaterThanOrEqual(1); // minimal A
-      expect(a.needsAttention - b.needsAttention).toBeGreaterThanOrEqual(1); // minimal B
+      expect(a.needsAttention - b.needsAttention).toBeGreaterThanOrEqual(3); // minimal B, D, E
       expect(a.notStarted - b.notStarted).toBeGreaterThanOrEqual(1); // minimal C
-      expect(a.active - b.active).toBeGreaterThanOrEqual(2); // minimal A & B (definisi aktif murni, boleh tumpang tindih)
+      expect(a.active - b.active).toBeGreaterThanOrEqual(3); // minimal A, B & D (E di luar jendela)
+
+      // --- boundary jendela aktif (§3, dikoreksi §8): isolasi kontribusi D & E
+      // saja terhadap snapshot tepat sebelum keduanya dibuat, lepas dari
+      // noise A/B/C atau suite lain di window sebelumnya. ---
+      const bb = boundaryBefore.body.totals;
+      expect(a.active - bb.active).toBeGreaterThanOrEqual(1); // hanya D (selisih 6 -> aktif)
+      expect(a.needsAttention - bb.needsAttention).toBeGreaterThanOrEqual(2); // D (6) dan E (7) -> keduanya butuh_perhatian
 
       // --- hardestItems ---
       expect(body.contentHealth.hardestItems[0]).toEqual(

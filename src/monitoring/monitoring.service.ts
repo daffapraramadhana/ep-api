@@ -50,9 +50,14 @@ export interface ExhaustedByLevelView {
   users: number;
 }
 
+export interface ActivitySeriesPoint {
+  date: string;
+  sessionsCompleted: number;
+}
+
 export interface OverviewView {
   totals: OverviewTotals;
-  activitySeries: DayCount[];
+  activitySeries: ActivitySeriesPoint[];
   contentHealth: {
     hardestItems: HardestItemView[];
     exhaustedByLevel: ExhaustedByLevelView[];
@@ -72,7 +77,7 @@ export class MonitoringService {
     const today = todayWIB();
     const threshold = await this.config.getInt('MONITOR_INACTIVE_DAYS');
 
-    const [activitySeries, users, openReports] = await Promise.all([
+    const [activityDays, users, openReports] = await Promise.all([
       this.buildActivitySeries(today),
       this.prisma.user.findMany({
         where: { role: 'USER' },
@@ -80,6 +85,12 @@ export class MonitoringService {
       }),
       this.prisma.itemReport.count({ where: { status: 'OPEN' } }),
     ]);
+    // Spec §4: shape HTTP-nya `{ date, sessionsCompleted }` — DayCount murni
+    // (metrics.ts, dipakai Task 2 juga) tetap pakai nama field `count`.
+    const activitySeries: ActivitySeriesPoint[] = activityDays.map((d) => ({
+      date: d.date,
+      sessionsCompleted: d.count,
+    }));
 
     const totals = await this.buildTotals(today, threshold, users);
     const contentHealth = await this.buildContentHealth(users);
