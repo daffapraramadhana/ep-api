@@ -36,8 +36,14 @@ export class ReportController {
     const item = await this.prisma.item.findUnique({ where: { id } });
     if (!item) throw new NotFoundException();
 
-    return this.prisma.itemReport.create({
-      data: { userId: user.sub, itemId: id, note },
+    // I6: was a bare `create`, so the same user re-reporting the same item
+    // kept inserting unbounded rows. @@unique([userId, itemId]) on
+    // ItemReport now backs an upsert instead — refresh the existing report
+    // (new note, back to OPEN) rather than accumulating duplicates.
+    return this.prisma.itemReport.upsert({
+      where: { userId_itemId: { userId: user.sub, itemId: id } },
+      create: { userId: user.sub, itemId: id, note },
+      update: { note, status: 'OPEN' },
     });
   }
 }

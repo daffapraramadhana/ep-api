@@ -188,6 +188,8 @@ model ItemReport {
   note      String
   status    ReportStatus @default(OPEN)
   createdAt DateTime @default(now())
+
+  @@unique([userId, itemId])
 }
 
 model Config {

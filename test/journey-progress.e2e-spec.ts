@@ -495,6 +495,25 @@ describe('Journey / Progress / Item Report (Task 6)', () => {
       expect(row?.note).toBe('Soal ini jawabannya salah');
     });
 
+    // I6 regresi: report kedua oleh USER YANG SAMA pada ITEM YANG SAMA harus
+    // upsert (refresh note + status), bukan menambah baris kedua tanpa batas
+    // — @@unique([userId, itemId]) di ItemReport + POST .../report yang kini
+    // upsert, bukan create.
+    it('report kedua kali oleh user yang sama pada item yang sama → upsert, bukan baris baru', async () => {
+      await post(
+        `/items/${itemId}/report`,
+        { note: 'Laporan kedua, note diperbarui' },
+        user.token,
+      ).expect(201);
+
+      const rows = await prisma.itemReport.findMany({
+        where: { userId: user.id, itemId },
+      });
+      expect(rows).toHaveLength(1);
+      expect(rows[0].note).toBe('Laporan kedua, note diperbarui');
+      expect(rows[0].status).toBe('OPEN');
+    });
+
     it('role ADMIN juga boleh report (JwtAuthGuard saja, tanpa RolesGuard)', async () => {
       await post(
         `/items/${itemId}/report`,
