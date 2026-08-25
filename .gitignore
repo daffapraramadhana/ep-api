@@ -45,5 +45,8 @@ lerna-debug.log*
 .tmp
 .temp
 
+# uploaded media storage (local driver)
+/storage/
+
 # Serverless directories
 .serverless/
