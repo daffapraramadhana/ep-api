@@ -1,15 +1,194 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum ContentStatus {
+  DRAFT
+  LIVE
+  RETIRED
+}
+
+enum ItemType {
+  PILIHAN_GANDA
+  ISIAN
+  SUSUN_KALIMAT
+}
+
+enum Level {
+  DASAR
+  MENENGAH
+  MAHIR
+}
+
+enum Cefr {
+  A1
+  A2
+  B1
+  B2
+  C1
+  C2
+}
+
+enum SkillTag {
+  VOCABULARY
+  GRAMMAR
+  LISTENING
+  READING
+}
+
+enum SessionStatus {
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+}
+
+enum ReportStatus {
+  OPEN
+  RESOLVED
+}
+
+enum SessionItemSource {
+  LESSON
+  REVIEW
+}
+
+model User {
+  id           String  @id @default(cuid())
+  name         String
+  email        String  @unique
+  role         Role    @default(USER)
+  passwordHash String?
+  level        Level?
+  dailyTargetSessions Int @default(1)
+  inviteToken  String? @unique
+  inviteStatus InviteStatus @default(PENDING)
+  createdAt    DateTime @default(now())
+  sessions     Session[]
+  attempts     Attempt[]
+  reviewQueue  ReviewQueue[]
+  itemReports  ItemReport[]
+  streakFreezes StreakFreeze[]
+}
+
+model Lesson {
+  id     String @id @default(cuid())
+  code   String @unique
+  title  String
+  topic  String
+  level  Level
+  cefr   Cefr
+  skill  SkillTag
+  order  Int
+  status ContentStatus @default(DRAFT)
+  items  Item[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Item {
+  id              String @id @default(cuid())
+  lessonId        String
+  lesson          Lesson @relation(fields: [lessonId], references: [id])
+  type            ItemType
+  prompt          String
+  options         Json?
+  answerKey       String
+  acceptedAnswers String[] @default([])
+  explanation     String
+  mediaFile       String?
+  passage         String?
+  order           Int
+  status          ContentStatus @default(DRAFT)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  attempts        Attempt[]
+  sessionItems    SessionItem[]
+  reviewQueue     ReviewQueue[]
+  itemReports     ItemReport[]
+  @@unique([lessonId, order])
+}
+
+model Session {
+  id          String @id @default(cuid())
+  userId      String
+  user        User @relation(fields: [userId], references: [id])
+  date        DateTime @db.Date
+  status      SessionStatus @default(IN_PROGRESS)
+  completedAt DateTime?
+  items       SessionItem[]
+  attempts    Attempt[]
+  @@unique([userId, date])
+}
+
+model SessionItem {
+  sessionId String
+  session   Session @relation(fields: [sessionId], references: [id])
+  itemId    String
+  item      Item @relation(fields: [itemId], references: [id])
+  source    SessionItemSource
+  order     Int
+  @@id([sessionId, itemId])
+}
+
+model Attempt {
+  id         String  @id @default(cuid())
+  userId     String
+  user       User @relation(fields: [userId], references: [id])
+  itemId     String
+  item       Item @relation(fields: [itemId], references: [id])
+  sessionId  String
+  session    Session @relation(fields: [sessionId], references: [id])
+  answer     String
+  correct    Boolean
+  firstTry   Boolean
+  answeredAt DateTime @default(now())
+  @@index([userId, answeredAt])
+}
+
+model ReviewQueue {
+  userId        String
+  user          User @relation(fields: [userId], references: [id])
+  itemId        String
+  item          Item @relation(fields: [itemId], references: [id])
+  dueDate       DateTime @db.Date
+  correctStreak Int @default(0)
+  @@id([userId, itemId])
+}
+
+model ItemReport {
+  id        String @id @default(cuid())
+  userId    String
+  user      User @relation(fields: [userId], references: [id])
+  itemId    String
+  item      Item @relation(fields: [itemId], references: [id])
+  note      String
+  status    ReportStatus @default(OPEN)
+  createdAt DateTime @default(now())
+}
+
+model Config {
+  key   String @id
+  value String
+}
+
+model StreakFreeze {
+  userId    String
+  user      User @relation(fields: [userId], references: [id])
+  weekStart DateTime @db.Date
+  usedAt    DateTime @default(now())
+  @@id([userId, weekStart])
 }

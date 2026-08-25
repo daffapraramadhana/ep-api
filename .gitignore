@@ -47,6 +47,3 @@ lerna-debug.log*
 
 # Serverless directories
 .serverless/
-
-# generated Prisma client
-/generated/prisma
