@@ -137,6 +137,19 @@ describe('GET/PATCH /me, GET /me/summary', () => {
       expect(res.body.message).toBeDefined();
     });
 
+    // I5: tanpa ValidationPipe, `soundOn` non-boolean sebelumnya lolos ke
+    // prisma.user.update apa adanya — guard typeof eksplisit di
+    // me.controller.ts sekarang menolaknya dengan 400 yang jelas.
+    it('PATCH soundOn bukan boolean (string) → 400', async () => {
+      const user = await makeUser('P2C Me User2b', `p2c-me-2b-${stamp}@ex.com`);
+      const res = await patch(
+        '/me',
+        { soundOn: 'yes' },
+        user.token,
+      ).expect(400);
+      expect(res.body.message).toBeDefined();
+    });
+
     it('PATCH soundOn saja (level belum diisi) → onboarded tetap false', async () => {
       const user = await makeUser('P2C Me User3', `p2c-me-3-${stamp}@ex.com`);
       const res = await patch('/me', { soundOn: false }, user.token).expect(

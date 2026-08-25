@@ -69,6 +69,13 @@ export class MeController {
     if (body.level !== undefined && !LEVELS.includes(body.level)) {
       throw new BadRequestException('level tidak valid');
     }
+    // I5: mirror answer.service.ts's typeof guard — without a
+    // ValidationPipe, a malformed `soundOn` (e.g. a string) would otherwise
+    // reach prisma.user.update untyped-checked and either silently coerce or
+    // 500.
+    if (body.soundOn !== undefined && typeof body.soundOn !== 'boolean') {
+      throw new BadRequestException('soundOn harus boolean');
+    }
 
     const existing = await this.prisma.user.findUniqueOrThrow({
       where: { id: user.sub },
