@@ -2,6 +2,7 @@ import 'dotenv/config';
 import * as ExcelJS from 'exceljs';
 import { Test } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
+import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { ImportService } from '../src/content/import/import.service';
@@ -238,5 +239,70 @@ describe('import (service)', () => {
     // meng-null-kan kolom options saat type berubah dari pilihan_ganda,
     // alih-alih meninggalkan array options lama (stale) di kolom tsb.
     expect(updated.options).toBeNull();
+  });
+});
+
+describe('import endpoint', () => {
+  let app: INestApplication;
+  let prisma: PrismaService;
+  let adminToken: string;
+
+  beforeAll(async () => {
+    const m = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+    app = m.createNestApplication();
+    await app.init();
+    prisma = app.get(PrismaService);
+
+    const login = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email: process.env.ADMIN_EMAIL, password: process.env.ADMIN_PASSWORD })
+      .expect(201);
+    adminToken = login.body.accessToken;
+  });
+
+  afterAll(async () => {
+    await prisma.item.deleteMany({
+      where: { lesson: { code: { startsWith: 'TST-' } } },
+    });
+    await prisma.lesson.deleteMany({ where: { code: { startsWith: 'TST-' } } });
+    await app.close();
+  });
+
+  it('POST /admin/import/questions dengan .xlsx → 201 + ImportResult', async () => {
+    const buf = await buildTestWorkbook();
+    const res = await request(app.getHttpServer())
+      .post('/admin/import/questions')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .attach('file', buf, 'soal.xlsx')
+      .expect(201);
+
+    expect(res.body).toMatchObject({
+      lessonsCreated: expect.any(Number),
+      lessonsUpdated: expect.any(Number),
+      itemsCreated: expect.any(Number),
+      itemsUpdated: expect.any(Number),
+      skippedRows: expect.any(Number),
+      errors: expect.any(Array),
+    });
+  });
+
+  it('POST /admin/import/questions dengan .txt → 400 + error message', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/admin/import/questions')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .attach('file', Buffer.from('test'), 'soal.txt')
+      .expect(400);
+
+    expect(res.body.message).toBe('File harus .xlsx (pakai template yang dikirim)');
+  });
+
+  it('POST /admin/import/questions tanpa token → 401', async () => {
+    const buf = await buildTestWorkbook();
+    await request(app.getHttpServer())
+      .post('/admin/import/questions')
+      .attach('file', buf, 'soal.xlsx')
+      .expect(401);
   });
 });
