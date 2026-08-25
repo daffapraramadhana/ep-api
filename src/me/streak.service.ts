@@ -194,23 +194,26 @@ export class StreakService implements StreakEvaluator {
     return { streak: currentStreak, longest, frozenDates };
   }
 
+  /**
+   * `evaluate()` runs inside `answer.service.ts`'s $transaction (via `tx`).
+   * Postgres aborts the ENTIRE transaction on a unique-violation error unless
+   * a savepoint was set — Prisma's interactive transactions don't add one
+   * per statement, so a client-side try/catch around `.create()` would leave
+   * `tx` in a `25P02` "current transaction is aborted" state for every query
+   * after it, failing the whole answer-submission with a 500. `createMany`
+   * with `skipDuplicates: true` compiles to `INSERT ... ON CONFLICT DO
+   * NOTHING` instead, which never throws on a conflicting
+   * @@id([userId, weekStart]) row and keeps the transaction healthy.
+   */
   private async createFreezeIdempotent(
     db: PrismaLike,
     userId: string,
     weekStart: Date,
     coveredDate: Date,
   ): Promise<void> {
-    try {
-      await db.streakFreeze.create({
-        data: { userId, weekStart, coveredDate },
-      });
-    } catch (e) {
-      const isUniqueViolation =
-        e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002';
-      if (!isUniqueViolation) throw e;
-      // Another concurrent evaluate() already created this week's freeze row
-      // (or a stale in-memory freezeMap raced a prior call) — idempotent by
-      // @@id([userId, weekStart]), so just swallow it.
-    }
+    await db.streakFreeze.createMany({
+      data: [{ userId, weekStart, coveredDate }],
+      skipDuplicates: true,
+    });
   }
 }
