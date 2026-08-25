@@ -68,7 +68,29 @@ export class StreakService implements StreakEvaluator {
       createFreeze: false,
       excludeToday: true,
     });
-    const changed = withToday.streak > withoutToday.streak;
+
+    // I2 fix: `withToday.streak > withoutToday.streak` alone only asks "does
+    // today count at all" — once dailyTargetSessions is met for the day,
+    // that comparison stays true for every LATER session completed the same
+    // day too, so streakChanged/milestone would re-fire on every extra
+    // same-day completion. Gate it on completedToday === target: true only
+    // for the exact completion that tips today from unmet to met.
+    const user = await tx.user.findUnique({
+      where: { id: userId },
+      select: { dailyTargetSessions: true },
+    });
+    const target = user?.dailyTargetSessions ?? 1;
+    const completedToday = await tx.session.count({
+      where: {
+        userId,
+        kind: 'DAILY',
+        status: 'COMPLETED',
+        date: todayWIB(),
+      },
+    });
+
+    const changed =
+      withToday.streak > withoutToday.streak && completedToday === target;
     const milestone =
       changed && (MILESTONES as readonly number[]).includes(withToday.streak)
         ? (withToday.streak as 7 | 30 | 100)

@@ -251,8 +251,21 @@ export class AnswerService {
           userId,
           tx,
         );
+
+        // I1 fix: `bonusXp` is only the session-complete/perfect-session
+        // bonus — the celebration screen showing just that understates a
+        // session's real reward (and a replayed/reloaded summary would show
+        // 0 for a REPLAY session, which never awards a bonus at all). Sum
+        // every attempt's xpAwarded for this session and add the bonus on
+        // top, so xpSession matches what the user actually earned.
+        const xpAgg = await tx.attempt.aggregate({
+          where: { sessionId },
+          _sum: { xpAwarded: true },
+        });
+        const xpSession = (xpAgg._sum.xpAwarded ?? 0) + bonusXp;
+
         summary = {
-          xpSession: bonusXp,
+          xpSession,
           accuracyFirstTry,
           streak: streakResult.streak,
           streakChanged: streakResult.changed,

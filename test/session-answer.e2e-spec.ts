@@ -263,9 +263,14 @@ describe('POST /session/:id/answer (grading, xp, review queue, completion)', () 
       });
       expect(session?.status).toBe('COMPLETED');
       expect(session?.completedAt).not.toBeNull();
-      // Bukan sesi perfect (item ISIAN sempat salah) → hanya XP_SESSION_COMPLETE.
+      // Bukan sesi perfect (item ISIAN sempat salah) → hanya XP_SESSION_COMPLETE
+      // pada session.xpAwarded (kolom bonus-saja, tidak berubah oleh I1).
       expect(session?.xpAwarded).toBe(20);
-      expect(res.body.summary.xpSession).toBe(20);
+      // I1: summary.xpSession = SUM(attempt.xpAwarded di sesi ini) + bonus,
+      // bukan bonus saja. Attempt xp di sesi ini: MC 10 (first-try) + ISIAN
+      // 0 (salah) + ISIAN 2 (retry benar) + SUSUN 10 (first-try) = 22;
+      // bonus xpSessionComplete = 20 (bukan perfect) → 22 + 20 = 42.
+      expect(res.body.summary.xpSession).toBe(42);
     });
   });
 
@@ -316,11 +321,15 @@ describe('POST /session/:id/answer (grading, xp, review queue, completion)', () 
 
       expect(final.body.sessionCompleted).toBe(true);
       expect(final.body.summary.accuracyFirstTry).toBe(100);
-      expect(final.body.summary.xpSession).toBe(35);
+      // I1: attempt xp di sesi ini = item1 10 + item2 10 = 20 (keduanya
+      // first-try benar); bonus = xpSessionComplete 20 + xpPerfectSession 15
+      // = 35 → xpSession = 20 + 35 = 55.
+      expect(final.body.summary.xpSession).toBe(55);
 
       const session = await prisma.session.findUnique({
         where: { id: sessionId },
       });
+      // session.xpAwarded tetap kolom bonus-saja (tidak berubah oleh I1).
       expect(session?.xpAwarded).toBe(35);
     });
   });
@@ -356,11 +365,16 @@ describe('POST /session/:id/answer (grading, xp, review queue, completion)', () 
         userC.token,
       ).expect(201);
       expect(final.body.sessionCompleted).toBe(true);
-      expect(final.body.summary.xpSession).toBe(0);
+      // I1: REPLAY tidak dapat bonus (bonusXp = 0), tapi attempt xp tetap
+      // dihitung — item1 first-try benar = xpFirstTry 10 → xpSession = 10,
+      // BUKAN 0. Sebelum fix ini adalah kasus yang paling kentara: replay
+      // sesi selesai penuh dulu selalu tampil 0 XP di layar perayaan.
+      expect(final.body.summary.xpSession).toBe(10);
 
       const replaySession = await prisma.session.findUnique({
         where: { id: replaySessionId },
       });
+      // session.xpAwarded (kolom bonus-saja) tetap 0 untuk REPLAY.
       expect(replaySession?.xpAwarded).toBe(0);
     });
   });

@@ -1,6 +1,8 @@
 import 'dotenv/config';
 import { Test } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
+import request from 'supertest';
+import * as bcrypt from 'bcrypt';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { StreakService } from '../src/me/streak.service';
@@ -211,5 +213,156 @@ describe('StreakService.evaluate (lazy freeze + longest, e2e-light against real 
       where: { userId: user.id },
     });
     expect(freezes).toHaveLength(0);
+  });
+});
+
+// I2 regression: StreakService.evaluateAfterSession must report
+// streakChanged only for the ONE completion that tips today from unmet to
+// met — not for every extra DAILY session completed after that on the same
+// day. Drives the real POST /session/:id/answer flow (not
+// StreakService.evaluate() directly) so answer.service.ts's actual
+// completion branch — where evaluateAfterSession is invoked — is what's
+// under test. Own prefix (p2c2-/P2C2-) so this never collides with the
+// 'p2c-streak-' fixtures above (sequential within this file, but other
+// e2e-spec files may run in a parallel Jest worker).
+describe('StreakService.evaluateAfterSession via POST /session/:id/answer (I2: no re-fire on extra same-day session)', () => {
+  let app: INestApplication;
+  let prisma: PrismaService;
+
+  const PASSWORD = 'Password123!';
+  const stamp = Date.now();
+
+  function post(path: string, body: Record<string, unknown>, token: string) {
+    return request(app.getHttpServer())
+      .post(path)
+      .set('Authorization', `Bearer ${token}`)
+      .send(body);
+  }
+
+  async function makeSession(userId: string, itemId: string) {
+    const session = await prisma.session.create({
+      data: { userId, date: todayWIB(), kind: 'DAILY', status: 'IN_PROGRESS' },
+    });
+    await prisma.sessionItem.create({
+      data: { sessionId: session.id, itemId, source: 'LESSON', order: 0 },
+    });
+    return session.id;
+  }
+
+  beforeAll(async () => {
+    const m = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+    app = m.createNestApplication();
+    await app.init();
+    prisma = app.get(PrismaService);
+  });
+
+  afterAll(async () => {
+    await prisma.attempt.deleteMany({
+      where: { user: { email: { startsWith: 'p2c2-' } } },
+    });
+    await prisma.sessionItem.deleteMany({
+      where: { session: { user: { email: { startsWith: 'p2c2-' } } } },
+    });
+    await prisma.session.deleteMany({
+      where: { user: { email: { startsWith: 'p2c2-' } } },
+    });
+    await prisma.item.deleteMany({
+      where: { lesson: { code: { startsWith: 'P2C2-' } } },
+    });
+    await prisma.lesson.deleteMany({
+      where: { code: { startsWith: 'P2C2-' } },
+    });
+    await prisma.streakFreeze.deleteMany({
+      where: { user: { email: { startsWith: 'p2c2-' } } },
+    });
+    await prisma.user.deleteMany({
+      where: { email: { startsWith: 'p2c2-' } },
+    });
+    await app.close();
+  });
+
+  it('sesi DAILY kedua di hari yang sama (target sudah tercapai di sesi pertama) → streakChanged:false', async () => {
+    const passwordHash = await bcrypt.hash(PASSWORD, 10);
+    const user = await prisma.user.create({
+      data: {
+        name: 'P2C2 User',
+        email: `p2c2-user-${stamp}@ex.com`,
+        role: 'USER',
+        level: 'DASAR',
+        dailyTargetSessions: 1,
+        passwordHash,
+        inviteStatus: 'ACCEPTED',
+      },
+    });
+    const login = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email: user.email, password: PASSWORD })
+      .expect(201);
+    const token = login.body.accessToken as string;
+
+    const lesson = await prisma.lesson.create({
+      data: {
+        code: `P2C2-L1-${stamp}`,
+        title: 'P2C2 Lesson',
+        topic: 'P2C2 Topic',
+        level: 'DASAR',
+        cefr: 'A1',
+        skill: 'VOCABULARY',
+        order: 1,
+        status: 'LIVE',
+      },
+    });
+    const item1 = await prisma.item.create({
+      data: {
+        lessonId: lesson.id,
+        type: 'PILIHAN_GANDA',
+        prompt: 'Sesi 1',
+        options: ['A', 'B', 'C', 'D'],
+        answerKey: 'A',
+        explanation: 'x',
+        order: 1,
+        status: 'LIVE',
+      },
+    });
+    const item2 = await prisma.item.create({
+      data: {
+        lessonId: lesson.id,
+        type: 'PILIHAN_GANDA',
+        prompt: 'Sesi 2 (ekstra, hari yang sama)',
+        options: ['A', 'B', 'C', 'D'],
+        answerKey: 'A',
+        explanation: 'x',
+        order: 2,
+        status: 'LIVE',
+      },
+    });
+
+    // Sesi pertama hari ini: dailyTargetSessions (1) baru tercapai di sini
+    // -> ini SATU-SATUNYA completion yang boleh melaporkan streakChanged.
+    const sessionAId = await makeSession(user.id, item1.id);
+    const first = await post(
+      `/session/${sessionAId}/answer`,
+      { itemId: item1.id, answer: 'a' },
+      token,
+    ).expect(201);
+    expect(first.body.sessionCompleted).toBe(true);
+    expect(first.body.summary.streak).toBe(1);
+    expect(first.body.summary.streakChanged).toBe(true);
+
+    // Sesi kedua, EKSTRA, hari yang sama: target sudah tercapai sebelumnya
+    // -> streak tidak berubah lagi, streakChanged harus false (bug lama:
+    // re-fire di setiap sesi ekstra karena hanya membandingkan
+    // withToday > withoutToday, tanpa peduli target sudah tercapai sesi mana).
+    const sessionBId = await makeSession(user.id, item2.id);
+    const second = await post(
+      `/session/${sessionBId}/answer`,
+      { itemId: item2.id, answer: 'a' },
+      token,
+    ).expect(201);
+    expect(second.body.sessionCompleted).toBe(true);
+    expect(second.body.summary.streak).toBe(1);
+    expect(second.body.summary.streakChanged).toBe(false);
   });
 });
