@@ -1,5 +1,7 @@
 import 'dotenv/config';
 import * as ExcelJS from 'exceljs';
+import * as path from 'path';
+import { promises as fs } from 'fs';
 import { Test } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
@@ -257,7 +259,10 @@ describe('import endpoint', () => {
 
     const login = await request(app.getHttpServer())
       .post('/auth/login')
-      .send({ email: process.env.ADMIN_EMAIL, password: process.env.ADMIN_PASSWORD })
+      .send({
+        email: process.env.ADMIN_EMAIL,
+        password: process.env.ADMIN_PASSWORD,
+      })
       .expect(201);
     adminToken = login.body.accessToken;
   });
@@ -295,7 +300,9 @@ describe('import endpoint', () => {
       .attach('file', Buffer.from('test'), 'soal.txt')
       .expect(400);
 
-    expect(res.body.message).toBe('File harus .xlsx (pakai template yang dikirim)');
+    expect(res.body.message).toBe(
+      'File harus .xlsx (pakai template yang dikirim)',
+    );
   });
 
   it('POST /admin/import/questions tanpa token → 401', async () => {
@@ -304,5 +311,50 @@ describe('import endpoint', () => {
       .post('/admin/import/questions')
       .attach('file', buf, 'soal.xlsx')
       .expect(401);
+  });
+});
+
+describe('import (round-trip: template deliverable)', () => {
+  let app: INestApplication;
+  let prisma: PrismaService;
+  const TEMPLATE_CODES = ['BUS-01', 'LIS-01', 'RD-01'];
+
+  beforeAll(async () => {
+    const m = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+    app = m.createNestApplication();
+    await app.init();
+    prisma = app.get(PrismaService);
+  });
+
+  afterAll(async () => {
+    await prisma.item.deleteMany({
+      where: { lesson: { code: { in: TEMPLATE_CODES } } },
+    });
+    await prisma.lesson.deleteMany({
+      where: { code: { in: TEMPLATE_CODES } },
+    });
+    await app.close();
+  });
+
+  it('template-soal-v1.xlsx (deliverable klien) lolos importer kita sendiri', async () => {
+    const svc = app.get(ImportService);
+    const templatePath = path.resolve(
+      __dirname,
+      '../../../deliverables/template-soal-v1.xlsx',
+    );
+    const buf = await fs.readFile(templatePath);
+
+    const result = await svc.importWorkbook(buf);
+
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0]).toMatchObject({
+      column: 'media_file',
+      message: "File media 'audio_001.mp3' belum diunggah",
+    });
+    expect(result.lessonsCreated).toBe(2); // BUS-01 + RD-01 (LIS-01 gagal)
+    expect(result.itemsCreated).toBe(4); // 3 (BUS-01) + 1 (RD-01)
+    expect(result.skippedRows).toBe(1);
   });
 });
