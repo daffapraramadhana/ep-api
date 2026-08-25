@@ -6,9 +6,10 @@ import { UsersModule } from './users/users.module';
 import { StorageModule } from './storage/storage.module';
 import { MediaModule } from './media/media.module';
 import { ContentModule } from './content/content.module';
+import { CommonModule } from './common/common.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule, UsersModule, StorageModule, MediaModule, ContentModule],
+  imports: [PrismaModule, AuthModule, UsersModule, StorageModule, MediaModule, ContentModule, CommonModule],
   controllers: [AppController],
   providers: [],
 })
