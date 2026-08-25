@@ -66,6 +66,11 @@ enum SessionItemSource {
   REVIEW
 }
 
+enum SessionKind {
+  DAILY
+  REPLAY
+}
+
 model User {
   id           String  @id @default(cuid())
   name         String
@@ -76,6 +81,8 @@ model User {
   dailyTargetSessions Int @default(1)
   inviteToken  String? @unique
   inviteStatus InviteStatus @default(PENDING)
+  soundOn      Boolean @default(true)
+  onboardedAt  DateTime?
   createdAt    DateTime @default(now())
   sessions     Session[]
   attempts     Attempt[]
@@ -128,10 +135,12 @@ model Session {
   user        User @relation(fields: [userId], references: [id])
   date        DateTime @db.Date
   status      SessionStatus @default(IN_PROGRESS)
+  kind        SessionKind @default(DAILY)
+  xpAwarded   Int @default(0)
   completedAt DateTime?
   items       SessionItem[]
   attempts    Attempt[]
-  @@unique([userId, date])
+  @@index([userId, date])
 }
 
 model SessionItem {
@@ -155,6 +164,7 @@ model Attempt {
   answer     String
   correct    Boolean
   firstTry   Boolean
+  xpAwarded  Int @default(0)
   answeredAt DateTime @default(now())
   @@index([userId, answeredAt])
 }
@@ -186,9 +196,10 @@ model Config {
 }
 
 model StreakFreeze {
-  userId    String
-  user      User @relation(fields: [userId], references: [id])
-  weekStart DateTime @db.Date
-  usedAt    DateTime @default(now())
+  userId      String
+  user        User @relation(fields: [userId], references: [id])
+  weekStart   DateTime @db.Date
+  coveredDate DateTime @db.Date
+  usedAt      DateTime @default(now())
   @@id([userId, weekStart])
 }
