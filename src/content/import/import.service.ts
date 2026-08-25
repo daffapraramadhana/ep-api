@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StorageService } from '../../storage/storage.service';
 import { parseWorkbook } from './xlsx-parser';
@@ -75,7 +76,7 @@ export class ImportService {
           const data = {
             type: v.type,
             prompt: v.prompt,
-            options: v.options ?? undefined,
+            options: v.options ?? Prisma.DbNull,
             answerKey: v.answerKey,
             acceptedAnswers: v.acceptedAnswers,
             explanation: v.explanation,

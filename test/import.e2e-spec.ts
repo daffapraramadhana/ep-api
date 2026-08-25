@@ -176,7 +176,7 @@ describe('import (service)', () => {
     expect(after!.status).toBe('DRAFT'); // re-import → verifikasi ulang
   });
 
-  it('re-import yang mengubah type dari pilihan_ganda ke isian: options lama TIDAK terhapus (keterbatasan diketahui)', async () => {
+  it('re-import yang mengubah type dari pilihan_ganda ke isian: options lama dibersihkan (di-null-kan)', async () => {
     const svc = app.get(ImportService);
     const asPilihanGanda = await buildWorkbookFromRows([
       [
@@ -234,9 +234,9 @@ describe('import (service)', () => {
       where: { id: created.id },
     });
     expect(updated.type).toBe('ISIAN');
-    // Keterbatasan diketahui: `options: v.options ?? undefined` membuat Prisma
-    // MENGABAIKAN field ini pada update (bukan meng-null-kannya), sehingga
-    // array options lama dari pilihan_ganda tetap tersisa meski type sudah isian.
-    expect(updated.options).toEqual(['Satu', 'Dua', 'Tiga', 'Empat']);
+    // Fix: `options: v.options ?? Prisma.DbNull` membuat Prisma benar-benar
+    // meng-null-kan kolom options saat type berubah dari pilihan_ganda,
+    // alih-alih meninggalkan array options lama (stale) di kolom tsb.
+    expect(updated.options).toBeNull();
   });
 });
