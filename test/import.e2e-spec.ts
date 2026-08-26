@@ -317,7 +317,11 @@ describe('import endpoint', () => {
 describe('import (round-trip: template deliverable)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
-  const TEMPLATE_CODES = ['BUS-01', 'LIS-01', 'RD-01'];
+  // Hermetik: template disalin lalu lesson_code & media_file ditulis-ulang ke
+  // prefix uji, supaya test TIDAK menyentuh konten BUS/LIS/RD milik pengguna
+  // dan tidak bergantung pada isi storage (audio_001.mp3 boleh ada/tiada).
+  const RT_PREFIX = 'TESTRT-';
+  const RT_MEDIA = 'testrt_audio_missing.mp3';
 
   beforeAll(async () => {
     const m = await Test.createTestingModule({
@@ -330,10 +334,10 @@ describe('import (round-trip: template deliverable)', () => {
 
   afterAll(async () => {
     await prisma.item.deleteMany({
-      where: { lesson: { code: { in: TEMPLATE_CODES } } },
+      where: { lesson: { code: { startsWith: RT_PREFIX } } },
     });
     await prisma.lesson.deleteMany({
-      where: { code: { in: TEMPLATE_CODES } },
+      where: { code: { startsWith: RT_PREFIX } },
     });
     await app.close();
   });
@@ -346,15 +350,34 @@ describe('import (round-trip: template deliverable)', () => {
     );
     const buf = await fs.readFile(templatePath);
 
-    const result = await svc.importWorkbook(buf);
+    // salin + tulis-ulang kolom lesson_code & media_file
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(buf as unknown as ExcelJS.Buffer);
+    const ws = wb.worksheets.find((w) => w.name === 'Soal');
+    if (!ws) throw new Error('Sheet Soal tidak ditemukan di template');
+    const headers: Record<string, number> = {};
+    ws.getRow(1).eachCell((c, i) => {
+      headers[String(c.value ?? '').trim()] = i;
+    });
+    ws.eachRow((row, n) => {
+      if (n === 1) return;
+      const codeCell = row.getCell(headers['lesson_code']);
+      if (codeCell.value) codeCell.value = `${RT_PREFIX}${String(codeCell.value)}`;
+      const mediaCell = row.getCell(headers['media_file']);
+      if (mediaCell.value && String(mediaCell.value).trim() !== '')
+        mediaCell.value = RT_MEDIA;
+    });
+    const rtBuf = Buffer.from(await wb.xlsx.writeBuffer());
+
+    const result = await svc.importWorkbook(rtBuf);
 
     expect(result.errors).toHaveLength(1);
     expect(result.errors[0]).toMatchObject({
       column: 'media_file',
-      message: "File media 'audio_001.mp3' belum diunggah",
+      message: `File media '${RT_MEDIA}' belum diunggah`,
     });
-    expect(result.lessonsCreated).toBe(2); // BUS-01 + RD-01 (LIS-01 gagal)
-    expect(result.itemsCreated).toBe(4); // 3 (BUS-01) + 1 (RD-01)
+    expect(result.lessonsCreated).toBe(2); // TESTRT-BUS-01 + TESTRT-RD-01 (LIS gagal)
+    expect(result.itemsCreated).toBe(4); // 3 (BUS) + 1 (RD)
     expect(result.skippedRows).toBe(1);
   });
 });

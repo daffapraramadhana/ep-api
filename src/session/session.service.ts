@@ -79,8 +79,25 @@ export class SessionService {
 
       const open = await tx.session.findFirst({
         where: { userId, date: today, kind: 'DAILY', status: 'IN_PROGRESS' },
+        include: { _count: { select: { items: true, attempts: true } } },
       });
-      if (open) return open;
+      if (open && open._count.items > 0) return open;
+      if (open) {
+        // Sesi yatim: IN_PROGRESS tapi semua session_item-nya hilang
+        // (mis. item/lesson dihapus dari luar alur normal). Tanpa item ia
+        // tak pernah bisa selesai dan akan terus dikembalikan di sini —
+        // user melihat "Sesi selesai!" kosong selamanya. Buang dan rakit
+        // ulang. Bila (anehnya) masih ada attempt yang merujuknya, jangan
+        // hapus (FK Restrict) — tutup saja supaya tidak menghalangi.
+        if (open._count.attempts === 0) {
+          await tx.session.delete({ where: { id: open.id } });
+        } else {
+          await tx.session.update({
+            where: { id: open.id },
+            data: { status: 'COMPLETED', completedAt: new Date() },
+          });
+        }
+      }
 
       const maxReview = await this.config.getInt('REVIEW_MAX_PER_SESSION');
       const reviews = await tx.reviewQueue.findMany({
