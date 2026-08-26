@@ -54,6 +54,7 @@ enum SessionStatus {
 enum InviteStatus {
   PENDING
   ACCEPTED
+  AWAITING_APPROVAL
 }
 
 enum ReportStatus {

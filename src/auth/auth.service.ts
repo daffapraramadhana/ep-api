@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
@@ -11,10 +11,31 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({ where: { email } });
     if (!user?.passwordHash || !(await bcrypt.compare(password, user.passwordHash)))
       throw new UnauthorizedException('Email atau password salah');
+    if (user.inviteStatus === 'AWAITING_APPROVAL')
+      throw new ForbiddenException('Akun kamu menunggu persetujuan admin');
     return {
       accessToken: await this.jwt.signAsync({ sub: user.id, role: user.role }),
       role: user.role, name: user.name,
     };
+  }
+
+  async register(name: string, email: string, password: string) {
+    const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const normalized = (email ?? '').toLowerCase().trim();
+    if (!name?.trim()) throw new BadRequestException('Nama wajib diisi');
+    if (!EMAIL_RE.test(normalized)) throw new BadRequestException('Email tidak valid');
+    if (!password || password.length < 8)
+      throw new BadRequestException('Password minimal 8 karakter');
+    if (await this.prisma.user.findUnique({ where: { email: normalized } }))
+      throw new BadRequestException('Email sudah terdaftar');
+    await this.prisma.user.create({
+      data: {
+        name: name.trim(), email: normalized,
+        passwordHash: await bcrypt.hash(password, 10),
+        inviteStatus: 'AWAITING_APPROVAL',
+      },
+    });
+    return { message: 'Pendaftaran diterima, tunggu persetujuan admin' };
   }
 
   async inviteInfo(token: string) {

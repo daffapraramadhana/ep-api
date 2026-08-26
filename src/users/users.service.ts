@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { parse } from 'csv-parse/sync';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -17,6 +17,15 @@ export class UsersService {
       },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  async approve(id: string) {
+    const u = await this.prisma.user.findFirst({
+      where: { id, inviteStatus: 'AWAITING_APPROVAL' } });
+    if (!u) throw new NotFoundException('User menunggu persetujuan tidak ditemukan');
+    await this.prisma.user.update({
+      where: { id }, data: { inviteStatus: 'ACCEPTED' } });
+    return { message: 'Disetujui' };
   }
 
   async importCsv(buf: Buffer) {

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, UseGuards, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { Controller, Get, Param, Patch, Post, UseGuards, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -14,6 +14,11 @@ export class UsersController {
   @Get()
   list() {
     return this.users.list();
+  }
+
+  @Patch(':id/approve')
+  approve(@Param('id') id: string) {
+    return this.users.approve(id);
   }
 
   @Post('import')

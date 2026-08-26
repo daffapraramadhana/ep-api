@@ -9,6 +9,11 @@ export class AuthController {
     return this.auth.login(b.email, b.password);
   }
 
+  @Post('register')
+  register(@Body() b: { name: string; email: string; password: string }) {
+    return this.auth.register(b.name, b.email, b.password);
+  }
+
   @Get('invite/:token')
   inviteInfo(@Param('token') token: string) {
     return this.auth.inviteInfo(token);
