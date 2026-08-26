@@ -1,6 +1,7 @@
 import { storageProviderClass } from './storage.module';
 import { LocalStorageService } from './local.storage';
 import { S3StorageService } from './s3.storage';
+import { MinioStorageService } from './minio.storage';
 
 describe('storageProviderClass (STORAGE_DRIVER selection)', () => {
   const original = process.env.STORAGE_DRIVER;
@@ -18,6 +19,11 @@ describe('storageProviderClass (STORAGE_DRIVER selection)', () => {
   it('selects S3StorageService when STORAGE_DRIVER=s3', () => {
     process.env.STORAGE_DRIVER = 's3';
     expect(storageProviderClass()).toBe(S3StorageService);
+  });
+
+  it('selects MinioStorageService when STORAGE_DRIVER=minio', () => {
+    process.env.STORAGE_DRIVER = 'minio';
+    expect(storageProviderClass()).toBe(MinioStorageService);
   });
 
   it('falls back to LocalStorageService for any other value', () => {

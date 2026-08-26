@@ -18,6 +18,16 @@ export function assertRequiredEnv(): void {
       'S3_PUBLIC_URL',
     );
   }
+  if (process.env.STORAGE_DRIVER === 'minio') {
+    // MINIO_PORT opsional (default 9000) — sisanya wajib.
+    required.push(
+      'MINIO_ENDPOINT',
+      'MINIO_BUCKET',
+      'MINIO_ACCESS_KEY',
+      'MINIO_SECRET_KEY',
+      'MINIO_PUBLIC_BASE_URL',
+    );
+  }
   const missing = required.filter((key) => !process.env[key]);
   if (missing.length) {
     // eslint-disable-next-line no-console
