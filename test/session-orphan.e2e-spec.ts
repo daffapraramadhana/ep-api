@@ -116,5 +116,16 @@ describe('session orphan recovery (POST /session/today)', () => {
       .set('Authorization', `Bearer ${token}`)
       .expect(201);
     expect(again.body.id).toBe(res.body.id);
+
+    // /me/summary tahu ada sesi berjalan -> Beranda bisa menampilkan LANJUTKAN
+    const summary = await request(app.getHttpServer())
+      .get('/me/summary')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(summary.body.openSession).toMatchObject({
+      lessonTitle: 'Orphan Recovery Lesson',
+      answered: 0,
+      total: res.body.items.length,
+    });
   });
 });

@@ -15,6 +15,14 @@ export interface NextLessonView {
   xpEstimate: number;
 }
 
+export interface OpenSessionView {
+  /** judul lesson slot LESSON pertama; null utk sesi penguatan/replay campuran */
+  lessonTitle: string | null;
+  /** soal yang sudah terjawab benar (semantik segmen sesi) */
+  answered: number;
+  total: number;
+}
+
 export interface SummaryView {
   name: string;
   streak: number;
@@ -25,6 +33,9 @@ export interface SummaryView {
   reviewsDue: number;
   contentExhausted: boolean;
   nextLesson: NextLessonView | null;
+  /** sesi DAILY hari ini yang masih berjalan — Beranda menampilkan
+   *  "LANJUTKAN" alih-alih menawarkan lesson baru. */
+  openSession: OpenSessionView | null;
 }
 
 @Injectable()
@@ -97,6 +108,8 @@ export class SummaryService {
         }
       : null;
 
+    const openSession = await this.getOpenSession(userId, today);
+
     return {
       name: user.name,
       streak: streakResult.streak,
@@ -107,6 +120,7 @@ export class SummaryService {
       reviewsDue,
       contentExhausted: nextLessonView === null,
       nextLesson: nextLessonView,
+      openSession,
     };
   }
 
@@ -116,6 +130,28 @@ export class SummaryService {
    * `lessonCompletion` helper for the per-user done/not-done map so the two
    * stay consistent, plus this method's own itemCount for the estimate.
    */
+  /** Sesi DAILY hari ini yang IN_PROGRESS (beku) — untuk CTA "LANJUTKAN". */
+  private async getOpenSession(userId: string, today: Date): Promise<OpenSessionView | null> {
+    const open = await this.prisma.session.findFirst({
+      where: { userId, date: today, kind: 'DAILY', status: 'IN_PROGRESS' },
+      include: {
+        items: {
+          orderBy: { order: 'asc' },
+          include: { item: { select: { lesson: { select: { title: true } } } } },
+        },
+        attempts: { where: { correct: true }, select: { itemId: true } },
+      },
+    });
+    if (!open || open.items.length === 0) return null;
+    const correctIds = new Set(open.attempts.map((a) => a.itemId));
+    const firstLessonSlot = open.items.find((si) => si.source === 'LESSON');
+    return {
+      lessonTitle: firstLessonSlot?.item.lesson.title ?? null,
+      answered: open.items.filter((si) => correctIds.has(si.itemId)).length,
+      total: open.items.length,
+    };
+  }
+
   private async getNextLesson(
     userId: string,
     level: Level | null,
