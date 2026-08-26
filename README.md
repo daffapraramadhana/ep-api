@@ -23,6 +23,7 @@ npm install
 cp .env.example .env          # lalu sesuaikan
 npx prisma migrate dev        # terapkan migrasi
 npx prisma db seed            # idempoten: config XP + akun admin dari env
+npm run seed:demo             # opsional: 1 modul demo "Daily Conversation" (4 lesson/32 soal + audio TTS), LIVE
 npm run start:dev             # http://localhost:3001
 ```
 
