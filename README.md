@@ -1,4 +1,4 @@
-# ep-api — Daily English Learning Platform (Backend)
+# ep-api — Fluen (Backend)
 
 API untuk platform belajar bahasa Inggris harian karyawan. **Seluruh logika bisnis hidup di sini** — auth + undangan, importer soal (xlsx) & karyawan (CSV), media, CRUD konten, engine sesi harian, penilaian 3 tipe soal, XP/streak/review queue, agregasi journey & progress. Frontend ([ep-web](https://github.com/daffapraramadhana/ep-web)) adalah lapisan tampilan tipis di atas API ini.
 
