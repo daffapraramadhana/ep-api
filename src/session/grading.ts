@@ -24,27 +24,31 @@ function words(s: string): string[] {
 }
 
 /**
- * Rasio kata referensi yang muncul di transcript (bag-per-kata, urutan
- * diabaikan). Filler ("uh", "um", pengulangan) dan kata tambahan tidak
- * menurunkan skor — cocok untuk drill membaca.
- * ponytail: skor presisi & urutan kata bisa ditambahkan bila laporan pilot
- * menunjukkan false-positive; cukup ubah fungsi ini, ambang tetap di config.
+ * Rasio kecocokan kata berurutan (LCS per-kata ÷ jumlah kata referensi).
+ * Menghitung kata yang muncul DAN tetap dalam urutan relatif yang sama
+ * terhadap kalimat referensi — membaca terbalik/acak dihukum. Filler ("uh",
+ * "um", pengulangan) dan kata tambahan tetap gratis: LCS melewati token yang
+ * tidak cocok, tidak menurunkan skor. Ambang tetap di config.
  */
 export function wordOverlapRatio(reference: string, transcript: string): number {
   const ref = words(reference);
   const trans = words(transcript);
   if (ref.length === 0) return 0;
-  const bag = new Map<string, number>();
-  for (const w of trans) bag.set(w, (bag.get(w) ?? 0) + 1);
-  let hit = 0;
-  for (const w of ref) {
-    const n = bag.get(w) ?? 0;
-    if (n > 0) {
-      hit++;
-      bag.set(w, n - 1);
+  const n = ref.length;
+  const m = trans.length;
+  // DP LCS word-level. Transcript pendek (satu kalimat) — O(n*m) aman.
+  const dp: number[][] = Array.from({ length: n + 1 }, () =>
+    new Array(m + 1).fill(0),
+  );
+  for (let i = 1; i <= n; i++) {
+    for (let j = 1; j <= m; j++) {
+      dp[i][j] =
+        ref[i - 1] === trans[j - 1]
+          ? dp[i - 1][j - 1] + 1
+          : Math.max(dp[i - 1][j], dp[i][j - 1]);
     }
   }
-  return hit / ref.length;
+  return dp[n][m] / ref.length;
 }
 
 export function gradeAnswer(item: GradableItem, answer: string): boolean {

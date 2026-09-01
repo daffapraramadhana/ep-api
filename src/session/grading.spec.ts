@@ -98,10 +98,16 @@ describe('gradeAnswer', () => {
       );
     });
 
-    it('urutan kata beda → tetap 1 (urutan diabaikan)', () => {
+    it('urutan kata terbalik → skor rendah (urutan diperhitungkan)', () => {
       expect(
         wordOverlapRatio('I went to the store', 'store the to went I'),
-      ).toBe(1);
+      ).toBe(0.2); // LCS = 1 kata dari 5
+    });
+
+    it('dua kata bertukar posisi → tetap tinggi (4/5)', () => {
+      expect(
+        wordOverlapRatio('I went to the store', 'I went the to store'),
+      ).toBe(0.8);
     });
 
     it('filler tidak menurunkan skor', () => {
