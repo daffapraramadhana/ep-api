@@ -172,7 +172,7 @@ export class MonitoringService {
     const grouped = await this.prisma.session.groupBy({
       by: ['date'],
       where: {
-        kind: 'DAILY',
+        kind: { in: ['DAILY', 'SPEAKING'] },
         status: 'COMPLETED',
         date: { gte: start, lte: today },
       },
@@ -206,7 +206,7 @@ export class MonitoringService {
       ? await this.prisma.session.findMany({
           where: {
             userId: { in: users.map((u) => u.id) },
-            kind: 'DAILY',
+            kind: { in: ['DAILY', 'SPEAKING'] },
             status: 'COMPLETED',
             date: { gte: windowStart, lte: today },
           },
@@ -397,7 +397,7 @@ export class MonitoringService {
         this.prisma.session.findMany({
           where: {
             userId: { in: userIds },
-            kind: 'DAILY',
+            kind: { in: ['DAILY', 'SPEAKING'] },
             status: 'COMPLETED',
             date: { gte: windowStart, lte: today },
           },
@@ -407,7 +407,7 @@ export class MonitoringService {
           by: ['userId'],
           where: {
             userId: { in: userIds },
-            kind: 'DAILY',
+            kind: { in: ['DAILY', 'SPEAKING'] },
             status: 'COMPLETED',
           },
           _max: { completedAt: true },
@@ -678,7 +678,7 @@ export class MonitoringService {
         by: ['date'],
         where: {
           userId: id,
-          kind: 'DAILY',
+          kind: { in: ['DAILY', 'SPEAKING'] },
           status: 'COMPLETED',
           date: { gte: calendarStart, lte: today },
         },

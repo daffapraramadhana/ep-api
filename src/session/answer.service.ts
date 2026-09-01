@@ -1,13 +1,18 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import * as path from 'path';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppConfigService } from '../common/config.service';
 import { addDays, todayWIB } from '../common/wib';
+import { StorageService } from '../storage/storage.service';
+import { STT_TRANSCRIBER } from '../speech/groq-stt.service';
+import type { SttTranscriber } from '../speech/groq-stt.service';
 import { gradeAnswer } from './grading';
 
 // WIB day boundaries, expressed as real UTC instants (see src/common/wib.ts —
@@ -42,6 +47,7 @@ export interface AnswerResult {
   correct: boolean;
   explanation: string;
   correctAnswer: string | null; // hanya diisi saat salah
+  transcript: string | null; // UCAPAN: apa yang dideteksi STT
   xpAwarded: number;
   sessionCompleted: boolean;
   summary: null | {
@@ -58,7 +64,9 @@ export class AnswerService {
   constructor(
     private prisma: PrismaService,
     private config: AppConfigService,
+    private storage: StorageService,
     @Inject(STREAK_EVALUATOR) private streakEvaluator: StreakEvaluator,
+    @Inject(STT_TRANSCRIBER) private stt: SttTranscriber,
   ) {}
 
   async submit(
@@ -73,22 +81,91 @@ export class AnswerService {
     if (typeof answer !== 'string') {
       throw new BadRequestException('answer wajib diisi');
     }
+    return this.commitAttempt(userId, sessionId, itemId, answer);
+  }
 
-    // Config reads are read-only lookups against a table this transaction
-    // never mutates, and AppConfigService owns its own PrismaService — no
-    // need to route them through `tx`.
+  /**
+   * Jalur jawaban tipe UCAPAN: consent wajib, simpan rekaman permanen,
+   * transcribe via Groq, lalu commit attempt seperti jawaban teks biasa.
+   * STT (jaringan) berjalan di LUAR transaksi DB — guard sesi/soal di-check
+   * dua kali: pre-check murah di sini (hindari buang call Groq) dan re-check
+   * di dalam commitAttempt (race-safety).
+   */
+  async submitSpeech(
+    userId: string,
+    sessionId: string,
+    itemId: string,
+    file: { buffer: Buffer; mimetype: string; originalname: string },
+  ): Promise<AnswerResult> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user?.voiceConsentAt) {
+      throw new ForbiddenException('Konsen rekaman suara belum diberikan');
+    }
+
+    const session = await this.prisma.session.findUnique({
+      where: { id: sessionId },
+      include: { items: true },
+    });
+    if (!session || session.userId !== userId) throw new NotFoundException();
+    if (session.status !== 'IN_PROGRESS') {
+      throw new BadRequestException('Sesi sudah selesai');
+    }
+    if (!session.items.some((si) => si.itemId === itemId)) {
+      throw new NotFoundException();
+    }
+    const item = await this.prisma.item.findUnique({ where: { id: itemId } });
+    if (!item) throw new NotFoundException();
+    if (item.type !== 'UCAPAN') {
+      throw new BadRequestException('Soal bukan tipe ucapan');
+    }
+    const alreadyCorrect = await this.prisma.attempt.findFirst({
+      where: { sessionId, itemId, correct: true },
+    });
+    if (alreadyCorrect) {
+      throw new BadRequestException('Soal ini sudah dijawab benar');
+    }
+
+    // Simpan permanen (keputusan produk: rekaman dipertahankan). Naming:
+    // speech/{sessionId}/{itemId}/{ts}-{rand}.{ext}. Orphan bila transaksi
+    // gagal setelah ini — terima, tanpa cron/cleanup di Rilis 1.
+    const ext = path.extname(file.originalname).toLowerCase() || '.webm';
+    const name = `speech/${sessionId}/${itemId}/${Date.now()}-${crypto.randomUUID().slice(0, 8)}${ext}`;
+    await this.storage.put(name, file.buffer);
+
+    const transcript = await this.stt.transcribe(file.buffer, file.mimetype);
+
+    // Transcript kosong = jawaban salah biasa (gradeAnswer kembali false),
+    // bukan error — user kirim rekaman diam, tercatat sebagai attempt salah.
+    return this.commitAttempt(userId, sessionId, itemId, transcript, name);
+  }
+
+  /**
+   * Inti penilaian + pencatatan attempt (XP, review queue, completion,
+   * streak) — dipakai bersama submit() dan submitSpeech(). Grading tetap
+   * fungsi murni gradeAnswer(); config dibaca di luar `tx` karena tabel
+   * config tak pernah dimutasi transaksi ini.
+   */
+  private async commitAttempt(
+    userId: string,
+    sessionId: string,
+    itemId: string,
+    answer: string,
+    audioFile?: string,
+  ): Promise<AnswerResult> {
     const [
       xpFirstTry,
       xpRetry,
       xpSessionComplete,
       xpPerfectSession,
       xpReviewCap,
+      speakingThreshold,
     ] = await Promise.all([
       this.config.getInt('XP_FIRST_TRY'),
       this.config.getInt('XP_RETRY'),
       this.config.getInt('XP_SESSION_COMPLETE'),
       this.config.getInt('XP_PERFECT_SESSION'),
       this.config.getInt('XP_DAILY_REVIEW_CAP'),
+      this.config.getInt('SPEAKING_MATCH_THRESHOLD'),
     ]);
 
     return this.prisma.$transaction(async (tx) => {
@@ -119,6 +196,8 @@ export class AnswerService {
           type: item.type,
           answerKey: item.answerKey,
           acceptedAnswers: item.acceptedAnswers,
+          threshold:
+            item.type === 'UCAPAN' ? speakingThreshold : undefined,
         },
         answer,
       );
@@ -160,6 +239,7 @@ export class AnswerService {
           correct,
           firstTry,
           xpAwarded,
+          ...(audioFile ? { audioFile } : {}),
         },
       });
 
@@ -233,7 +313,7 @@ export class AnswerService {
         const perfect = correctFirstCount === allItemIds.length;
 
         let bonusXp = 0;
-        if (session.kind === 'DAILY') {
+        if (session.kind === 'DAILY' || session.kind === 'SPEAKING') {
           bonusXp += xpSessionComplete;
           if (perfect) bonusXp += xpPerfectSession;
         }
@@ -277,6 +357,7 @@ export class AnswerService {
         correct,
         explanation: item.explanation,
         correctAnswer,
+        transcript: item.type === 'UCAPAN' ? answer : null,
         xpAwarded,
         sessionCompleted,
         summary,

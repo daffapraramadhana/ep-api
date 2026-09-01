@@ -17,9 +17,9 @@ export interface NormalizedRow {
   topic: string;
   level: 'DASAR' | 'MENENGAH' | 'MAHIR';
   cefr: 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2';
-  skill: 'VOCABULARY' | 'GRAMMAR' | 'LISTENING' | 'READING';
+  skill: 'VOCABULARY' | 'GRAMMAR' | 'LISTENING' | 'READING' | 'SPEAKING';
   itemOrder: number;
-  type: 'PILIHAN_GANDA' | 'ISIAN' | 'SUSUN_KALIMAT';
+  type: 'PILIHAN_GANDA' | 'ISIAN' | 'SUSUN_KALIMAT' | 'UCAPAN';
   prompt: string;
   options: string[] | null;
   answerKey: string;
@@ -41,11 +41,13 @@ const SKILLS: Record<string, NormalizedRow['skill']> = {
   grammar: 'GRAMMAR',
   listening: 'LISTENING',
   reading: 'READING',
+  speaking: 'SPEAKING',
 };
 const TYPES: Record<string, NormalizedRow['type']> = {
   pilihan_ganda: 'PILIHAN_GANDA',
   isian: 'ISIAN',
   susun_kalimat: 'SUSUN_KALIMAT',
+  ucapan: 'UCAPAN',
 };
 const REQUIRED = [
   'lesson_code',
@@ -129,6 +131,12 @@ export function validateRows(
     } else if (type === 'SUSUN_KALIMAT') {
       if (answerKey.split(/\s+/).filter(Boolean).length < 3)
         err('answer', 'Kalimat susun_kalimat minimal 3 kata');
+    } else if (type === 'UCAPAN') {
+      // answer = kalimat yang harus diucapkan user. Minimal 2 kata supaya
+      // ada sesuatu yang benar-benar "diucapkan" (bukan satu kata yang bisa
+      // diterka). accepted_answers diabaikan untuk tipe ini.
+      if (answerKey.split(/\s+/).filter(Boolean).length < 2)
+        err('answer', 'Kalimat ucapan minimal 2 kata');
     }
 
     const mediaFile = (r.media_file ?? '').trim() || null;

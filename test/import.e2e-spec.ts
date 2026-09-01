@@ -242,6 +242,43 @@ describe('import (service)', () => {
     // alih-alih meninggalkan array options lama (stale) di kolom tsb.
     expect(updated.options).toBeNull();
   });
+
+  it('import baris ucapan (skill speaking) → item tersimpan type UCAPAN', async () => {
+    const svc = app.get(ImportService);
+    const buf = await buildWorkbookFromRows([
+      [
+        'TST-UC',
+        'Ucapan Drill',
+        'Speaking',
+        'dasar',
+        'A1',
+        'speaking',
+        '1',
+        'ucapan',
+        'Baca kalimat ini dengan lantang.',
+        '',
+        '',
+        '',
+        '',
+        'I will call you tomorrow',
+        '',
+        'Latihan pelafalan.',
+        '',
+        '',
+      ],
+    ]);
+    const r = await svc.importWorkbook(buf);
+    expect(r).toMatchObject({ lessonsCreated: 1, itemsCreated: 1 });
+    const item = await prisma.item.findFirstOrThrow({
+      where: { lesson: { code: 'TST-UC' } },
+    });
+    expect(item.type).toBe('UCAPAN');
+    expect(item.answerKey).toBe('I will call you tomorrow');
+    const lesson = await prisma.lesson.findUniqueOrThrow({
+      where: { code: 'TST-UC' },
+    });
+    expect(lesson.skill).toBe('SPEAKING');
+  });
 });
 
 describe('import endpoint', () => {
@@ -376,8 +413,10 @@ describe('import (round-trip: template deliverable)', () => {
       column: 'media_file',
       message: `File media '${RT_MEDIA}' belum diunggah`,
     });
-    expect(result.lessonsCreated).toBe(2); // TESTRT-BUS-01 + TESTRT-RD-01 (LIS gagal)
-    expect(result.itemsCreated).toBe(4); // 3 (BUS) + 1 (RD)
+    // TESTRT-BUS-01 + TESTRT-RD-01 (LIS gagal) + TESTRT-SPK-01 (baris ucapan)
+    expect(result.lessonsCreated).toBe(3);
+    // 3 (BUS) + 1 (RD) + 1 (ucapan SPK)
+    expect(result.itemsCreated).toBe(5);
     expect(result.skippedRows).toBe(1);
   });
 });

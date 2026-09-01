@@ -118,6 +118,12 @@ const DASAR_LESSONS: DemoLesson[] = [
         answerKey: 'A',
         explanation: '"Nearby" = di dekat sini. "Is there a cafe nearby?"',
       },
+      {
+        type: 'UCAPAN',
+        prompt: 'Baca kalimat ini dengan lantang.',
+        answerKey: 'Could you speak more slowly please',
+        explanation: 'Frasa minta pelan-pelan saat lawan bicara terlalu cepat.',
+      },
     ],
   },
   {
@@ -177,6 +183,12 @@ const DASAR_LESSONS: DemoLesson[] = [
         answerKey: 'are',
         acceptedAnswers: ['are', 'were'],
         explanation: '"Many people" jamak → "are" (atau "were" bila bercerita lampau).',
+      },
+      {
+        type: 'UCAPAN',
+        prompt: 'Baca kalimat ini dengan lantang.',
+        answerKey: 'How was your weekend',
+        explanation: 'Latihan pelafalan sapaan lampau.',
       },
     ],
   },
@@ -256,6 +268,12 @@ const DASAR_LESSONS: DemoLesson[] = [
         passage:
           "Hi Mom, I'm still at the library finishing my homework. I'll take the 7 o'clock bus home, so please don't wait for dinner. I already ate with my friends.",
         explanation: 'Kalimat terakhir: "I already ate with my friends."',
+      },
+      {
+        type: 'UCAPAN',
+        prompt: 'Baca kalimat ini dengan lantang.',
+        answerKey: 'We are meeting at the cafe near the station',
+        explanation: 'Dari pesan Rina: "meeting at the cafe near the station".',
       },
     ],
   },

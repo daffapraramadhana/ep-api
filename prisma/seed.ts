@@ -8,6 +8,7 @@ const CONFIG: Record<string, string> = {
   XP_PERFECT_SESSION: '15', XP_DAILY_REVIEW_CAP: '100',
   REVIEW_MAX_PER_SESSION: '3',
   MONITOR_INACTIVE_DAYS: '5',
+  SPEAKING_MATCH_THRESHOLD: '70',
 };
 
 async function main() {

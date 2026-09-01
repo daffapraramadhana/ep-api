@@ -22,6 +22,7 @@ enum ItemType {
   PILIHAN_GANDA
   ISIAN
   SUSUN_KALIMAT
+  UCAPAN
 }
 
 enum Level {
@@ -44,6 +45,7 @@ enum SkillTag {
   GRAMMAR
   LISTENING
   READING
+  SPEAKING
 }
 
 enum SessionStatus {
@@ -70,6 +72,7 @@ enum SessionItemSource {
 enum SessionKind {
   DAILY
   REPLAY
+  SPEAKING
 }
 
 model User {
@@ -84,6 +87,7 @@ model User {
   inviteStatus InviteStatus @default(PENDING)
   soundOn      Boolean @default(true)
   onboardedAt  DateTime?
+  voiceConsentAt DateTime? // consent rekaman suara (UU PDP) — speak menolak tanpa ini
   createdAt    DateTime @default(now())
   sessions     Session[]
   attempts     Attempt[]
@@ -166,6 +170,7 @@ model Attempt {
   correct    Boolean
   firstTry   Boolean
   xpAwarded  Int @default(0)
+  audioFile  String? // hanya terisi utk tipe UCAPAN — rujukan rekaman permanen
   answeredAt DateTime @default(now())
   @@index([userId, answeredAt])
 }

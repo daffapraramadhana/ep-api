@@ -129,6 +129,39 @@ describe('validateRows', () => {
     expect(valid[0].type).toBe('SUSUN_KALIMAT');
   });
 
+  // (f2) ucapan: answer = kalimat yang diucapkan, skill speaking
+  it('ucapan valid -> dinormalkan dengan skill speaking', () => {
+    const row: RawRow = {
+      ...base,
+      skill: 'speaking',
+      type: 'ucapan',
+      prompt: 'Baca kalimat ini dengan lantang.',
+      answer: 'I will send the report tomorrow',
+      accepted_answers: '',
+    };
+    const { valid, errors } = validateRows([row], new Set());
+    expect(errors).toHaveLength(0);
+    expect(valid[0]).toMatchObject({
+      skill: 'SPEAKING',
+      type: 'UCAPAN',
+      answerKey: 'I will send the report tomorrow',
+    });
+    expect(valid[0].acceptedAnswers).toEqual([]);
+  });
+
+  it('ucapan dengan 1 kata -> error (minimal 2 kata)', () => {
+    const row: RawRow = {
+      ...base,
+      type: 'ucapan',
+      answer: 'hello',
+    };
+    const { valid, errors } = validateRows([row], new Set());
+    expect(valid).toHaveLength(0);
+    expect(errors).toContainEqual(
+      expect.objectContaining({ row: 2, column: 'answer' }),
+    );
+  });
+
   // (g) level 'Pemula' -> enum error
   it('level tidak dikenal -> error enum', () => {
     const row = { ...base, level: 'Pemula' };

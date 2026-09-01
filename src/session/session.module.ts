@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
+import { SpeechModule } from '../speech/speech.module';
 import { SessionController } from './session.controller';
 import { SessionService } from './session.service';
 import { AnswerService, STREAK_EVALUATOR } from './answer.service';
@@ -11,7 +12,7 @@ const streakEvaluatorProvider = {
 };
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, SpeechModule],
   controllers: [SessionController],
   providers: [
     SessionService,

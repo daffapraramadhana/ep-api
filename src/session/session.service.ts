@@ -187,6 +187,87 @@ export class SessionService {
     return this.view(created.id, userId);
   }
 
+  /**
+   * Sesi khusus berbicara (`kind: 'SPEAKING'`) — menu "Latihan Berbicara"
+   * di Home. Struktur menyalin getOrCreateToday (transaksi + advisory lock +
+   * resume sesi terbuka + handling sesi yatim), tapi memakai kind sendiri
+   * supaya tidak pernah me-resume sesi DAILY (dan sebaliknya — MULAI tetap
+   * kind: 'DAILY'). Konten: semua item UCAPAN dari lesson level user yang
+   * belum tuntas (materi baru saja, sesuai keputusan produk).
+   */
+  async speaking(userId: string): Promise<SessionView> {
+    const today = todayWIB();
+
+    const session = await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${userId}))`;
+
+      const open = await tx.session.findFirst({
+        where: { userId, date: today, kind: 'SPEAKING', status: 'IN_PROGRESS' },
+        include: { _count: { select: { items: true, attempts: true } } },
+      });
+      if (open && open._count.items > 0) return open;
+      if (open) {
+        // Sesi yatim — pola sama dengan getOrCreateToday: tanpa item ia tak
+        // pernah bisa selesai; buang bila kosong, tutup bila ada attempt.
+        if (open._count.attempts === 0) {
+          await tx.session.delete({ where: { id: open.id } });
+        } else {
+          await tx.session.update({
+            where: { id: open.id },
+            data: { status: 'COMPLETED', completedAt: new Date() },
+          });
+        }
+      }
+
+      const user = await tx.user.findUnique({ where: { id: userId } });
+      if (!user?.level) {
+        throw new ConflictException('Pilih levelmu dulu di profil');
+      }
+
+      const { lessons, map } = await this.lessonCompletionInternal(
+        userId,
+        user.level,
+        tx,
+      );
+      const incompleteIds = lessons
+        .filter((l) => l.items.length > 0 && !map.get(l.id))
+        .map((l) => l.id);
+      if (incompleteIds.length === 0) {
+        throw new ConflictException(
+          'Belum ada latihan berbicara baru untuk levelmu',
+        );
+      }
+
+      const items = await tx.item.findMany({
+        where: {
+          lessonId: { in: incompleteIds },
+          type: 'UCAPAN',
+          status: 'LIVE',
+        },
+        orderBy: [{ lesson: { order: 'asc' } }, { order: 'asc' }],
+      });
+      if (items.length === 0) {
+        throw new ConflictException(
+          'Belum ada latihan berbicara baru untuk levelmu',
+        );
+      }
+
+      const s = await tx.session.create({
+        data: { userId, date: today, kind: 'SPEAKING' },
+      });
+      await tx.sessionItem.createMany({
+        data: items.map((i, idx) => ({
+          sessionId: s.id,
+          itemId: i.id,
+          source: 'LESSON' as const,
+          order: idx,
+        })),
+      });
+      return s;
+    });
+    return this.view(session.id, userId);
+  }
+
   async view(sessionId: string, userId: string): Promise<SessionView> {
     const session = await this.prisma.session.findUnique({
       where: { id: sessionId },
@@ -212,9 +293,12 @@ export class SessionService {
     const answeredSet = new Set(attempts.map((a) => a.itemId));
 
     const firstLessonSlot = session.items.find((si) => si.source === 'LESSON');
-    const lessonTitle = firstLessonSlot
-      ? firstLessonSlot.item.lesson.title
-      : null;
+    const lessonTitle =
+      session.kind === 'SPEAKING'
+        ? 'Latihan Berbicara'
+        : firstLessonSlot
+          ? firstLessonSlot.item.lesson.title
+          : null;
 
     const items: SessionItemView[] = session.items.map((si) => {
       const item = si.item;
@@ -233,6 +317,10 @@ export class SessionService {
         mediaUrl: item.mediaFile ? this.storage.getUrl(item.mediaFile) : null,
         passage: item.passage,
         chips,
+        // UCAPAN: kalimat referensi HARUS ditampilkan ke user agar dibaca —
+        // bocor sengaja, bukan rahasia utk tipe ini (bukan kunci jawaban
+        // yang bisa "dibobol").
+        targetText: item.type === 'UCAPAN' ? item.answerKey : null,
         answeredCorrect: correctSet.has(item.id),
       };
     });

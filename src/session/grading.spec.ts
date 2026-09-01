@@ -1,4 +1,4 @@
-import { gradeAnswer } from './grading';
+import { gradeAnswer, wordOverlapRatio } from './grading';
 
 describe('gradeAnswer', () => {
   it('PILIHAN_GANDA benar, huruf kecil', () => {
@@ -83,5 +83,81 @@ describe('gradeAnswer', () => {
         '',
       ),
     ).toBe(false);
+  });
+
+  describe('wordOverlapRatio', () => {
+    it('kalimat identik → 1', () => {
+      expect(
+        wordOverlapRatio('I went to the store', 'I went to the store'),
+      ).toBe(1);
+    });
+
+    it('satu kata hilang → 4/5', () => {
+      expect(wordOverlapRatio('I went to the store', 'I went the store')).toBe(
+        0.8,
+      );
+    });
+
+    it('urutan kata beda → tetap 1 (urutan diabaikan)', () => {
+      expect(
+        wordOverlapRatio('I went to the store', 'store the to went I'),
+      ).toBe(1);
+    });
+
+    it('filler tidak menurunkan skor', () => {
+      expect(
+        wordOverlapRatio('I went to the store', 'I um went to the uh store'),
+      ).toBe(1);
+    });
+
+    it('referensi kosong → 0', () => {
+      expect(wordOverlapRatio('', 'anything')).toBe(0);
+    });
+
+    it('tanda baca diabaikan', () => {
+      expect(
+        wordOverlapRatio("It's a good day", "Its a good day."),
+      ).toBe(1);
+    });
+  });
+
+  describe('gradeAnswer UCAPAN', () => {
+    it('transcript pas di atas ambang default → benar', () => {
+      expect(
+        gradeAnswer(
+          { type: 'UCAPAN', answerKey: 'I went to the store', acceptedAnswers: [] },
+          'I went to the store',
+        ),
+      ).toBe(true);
+    });
+
+    it('banyak kata hilang di bawah ambang → salah', () => {
+      expect(
+        gradeAnswer(
+          { type: 'UCAPAN', answerKey: 'I went to the store', acceptedAnswers: [] },
+          'I went store',
+        ),
+      ).toBe(false);
+    });
+
+    it('ambang custom 100 → hanya kalimat identik benar', () => {
+      const item = {
+        type: 'UCAPAN' as const,
+        answerKey: 'I went to the store',
+        acceptedAnswers: [],
+        threshold: 100,
+      };
+      expect(gradeAnswer(item, 'I went to the store')).toBe(true);
+      expect(gradeAnswer(item, 'I went to store')).toBe(false);
+    });
+
+    it('transcript kosong → salah', () => {
+      expect(
+        gradeAnswer(
+          { type: 'UCAPAN', answerKey: 'I went to the store', acceptedAnswers: [] },
+          '',
+        ),
+      ).toBe(false);
+    });
   });
 });

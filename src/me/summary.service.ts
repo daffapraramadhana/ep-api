@@ -75,7 +75,7 @@ export class SummaryService {
         _sum: { xpAwarded: true },
       }),
       this.prisma.session.count({
-        where: { userId, kind: 'DAILY', status: 'COMPLETED', date: today },
+        where: { userId, kind: { in: ['DAILY', 'SPEAKING'] }, status: 'COMPLETED', date: today },
       }),
       this.prisma.reviewQueue.count({
         where: { userId, dueDate: { lte: today }, item: { status: 'LIVE' } },
@@ -133,7 +133,7 @@ export class SummaryService {
   /** Sesi DAILY hari ini yang IN_PROGRESS (beku) — untuk CTA "LANJUTKAN". */
   private async getOpenSession(userId: string, today: Date): Promise<OpenSessionView | null> {
     const open = await this.prisma.session.findFirst({
-      where: { userId, date: today, kind: 'DAILY', status: 'IN_PROGRESS' },
+      where: { userId, date: today, kind: { in: ['DAILY', 'SPEAKING'] }, status: 'IN_PROGRESS' },
       include: {
         items: {
           orderBy: { order: 'asc' },

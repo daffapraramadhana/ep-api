@@ -102,7 +102,7 @@ export class StreakService implements StreakEvaluator {
     const completedToday = await tx.session.count({
       where: {
         userId,
-        kind: 'DAILY',
+        kind: { in: ['DAILY', 'SPEAKING'] },
         status: 'COMPLETED',
         date: todayWIB(),
       },
@@ -133,7 +133,7 @@ export class StreakService implements StreakEvaluator {
     const sessions = await db.session.findMany({
       where: {
         userId,
-        kind: 'DAILY',
+        kind: { in: ['DAILY', 'SPEAKING'] },
         status: 'COMPLETED',
         date: { gte: windowStart },
       },

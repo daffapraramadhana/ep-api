@@ -158,6 +158,40 @@ describe('GET/PATCH /me, GET /me/summary', () => {
       expect(res.body.soundOn).toBe(false);
       expect(res.body.onboarded).toBe(false);
     });
+
+    it('PATCH voiceConsent → voiceConsentAt terisi sekali, permanen (PATCH kedua tidak mengubah)', async () => {
+      const user = await makeUser('P2C Me Voice', `p2c-me-voice-${stamp}@ex.com`);
+      const before = await get('/me', user.token).expect(200);
+      expect(before.body.voiceConsentAt).toBeNull();
+
+      const first = await patch('/me', { voiceConsent: true }, user.token).expect(
+        200,
+      );
+      expect(typeof first.body.voiceConsentAt).toBe('string');
+
+      const second = await patch('/me', { voiceConsent: true }, user.token).expect(
+        200,
+      );
+      expect(second.body.voiceConsentAt).toBe(first.body.voiceConsentAt);
+
+      const after = await get('/me', user.token).expect(200);
+      expect(after.body.voiceConsentAt).toBe(first.body.voiceConsentAt);
+    });
+
+    // Tanpa ValidationPipe, guard typeof eksplisit (pola I5) menolak body
+    // non-boolean supaya tidak lolos tak-terkontrol ke prisma.user.update.
+    it('PATCH voiceConsent bukan boolean → 400', async () => {
+      const user = await makeUser(
+        'P2C Me Voice2',
+        `p2c-me-voice2-${stamp}@ex.com`,
+      );
+      const res = await patch(
+        '/me',
+        { voiceConsent: 'yes' },
+        user.token,
+      ).expect(400);
+      expect(res.body.message).toBeDefined();
+    });
   });
 
   describe('GET /me/summary', () => {

@@ -64,7 +64,7 @@ export class ProgressService {
       this.prisma.session.findMany({
         where: {
           userId,
-          kind: 'DAILY',
+          kind: { in: ['DAILY', 'SPEAKING'] },
           status: 'COMPLETED',
           date: { gte: weekStart, lte: weekEnd },
         },

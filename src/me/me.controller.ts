@@ -18,6 +18,7 @@ interface PatchMeBody {
   level?: Level;
   dailyTargetSessions?: number;
   soundOn?: boolean;
+  voiceConsent?: boolean;
 }
 
 const LEVELS: Level[] = ['DASAR', 'MENENGAH', 'MAHIR'];
@@ -30,6 +31,7 @@ function toMeView(u: {
   dailyTargetSessions: number;
   soundOn: boolean;
   onboardedAt: Date | null;
+  voiceConsentAt: Date | null;
 }) {
   return {
     id: u.id,
@@ -39,6 +41,7 @@ function toMeView(u: {
     dailyTargetSessions: u.dailyTargetSessions,
     soundOn: u.soundOn,
     onboarded: u.onboardedAt !== null,
+    voiceConsentAt: u.voiceConsentAt,
   };
 }
 
@@ -76,6 +79,9 @@ export class MeController {
     if (body.soundOn !== undefined && typeof body.soundOn !== 'boolean') {
       throw new BadRequestException('soundOn harus boolean');
     }
+    if (body.voiceConsent !== undefined && typeof body.voiceConsent !== 'boolean') {
+      throw new BadRequestException('voiceConsent harus boolean');
+    }
 
     const existing = await this.prisma.user.findUniqueOrThrow({
       where: { id: user.sub },
@@ -94,6 +100,11 @@ export class MeController {
           : {}),
         ...(body.soundOn !== undefined ? { soundOn: body.soundOn } : {}),
         ...(firstTimeOnboarded ? { onboardedAt: new Date() } : {}),
+        // Consent sekali set, permanen — tidak bisa dicabut lewat endpoint ini
+        // (haplus-rekaman atas permintaan = backlog admin manual).
+        ...(body.voiceConsent && !existing.voiceConsentAt
+          ? { voiceConsentAt: new Date() }
+          : {}),
       },
     });
     return toMeView(updated);
