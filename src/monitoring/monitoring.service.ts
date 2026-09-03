@@ -79,6 +79,17 @@ export interface OverviewView {
     exhaustedByLevel: ExhaustedByLevelView[];
   };
   openReports: number;
+  /** talking agent — agregat org-wide 7 hari (tanpa rincian per-orang) */
+  voice: VoiceReportView;
+}
+
+export interface VoiceReportView {
+  conversations7d: number;
+  uniqueUsers7d: number;
+  minutes7d: number;
+  /** null bila conversations7d === 0 (hindari 0% menyesatkan dari 0 sampel) */
+  passRate7d: number | null;
+  costCredits7d: number;
 }
 
 export interface EmployeeListItemView {
@@ -124,6 +135,9 @@ export interface EmployeeDetailView {
   streak: number;
   longestStreak: number;
   xpTotal: number;
+  /** talking agent — percakapan GRADED & menit ngobrol (lifetime) */
+  voiceConversations: number;
+  voiceMinutes: number;
   calendar: CalendarDayView[];
   skills: EmployeeSkillView[];
   lessonHistory: LessonHistoryView[];
@@ -141,7 +155,7 @@ export class MonitoringService {
     const today = todayWIB();
     const threshold = await this.config.getInt('MONITOR_INACTIVE_DAYS');
 
-    const [activityDays, users, openReports] = await Promise.all([
+    const [activityDays, users, openReports, voice] = await Promise.all([
       this.buildActivitySeries(today),
       this.prisma.user.findMany({
         where: { role: 'USER' },
@@ -153,6 +167,7 @@ export class MonitoringService {
         },
       }),
       this.prisma.itemReport.count({ where: { status: 'OPEN' } }),
+      this.buildVoiceReport(today),
     ]);
     // Spec §4: shape HTTP-nya `{ date, sessionsCompleted }` — DayCount murni
     // (metrics.ts, dipakai Task 2 juga) tetap pakai nama field `count`.
@@ -164,7 +179,7 @@ export class MonitoringService {
     const totals = await this.buildTotals(today, threshold, users);
     const contentHealth = await this.buildContentHealth(users);
 
-    return { totals, activitySeries, contentHealth, openReports };
+    return { totals, activitySeries, contentHealth, openReports, voice };
   }
 
   private async buildActivitySeries(today: Date): Promise<DayCount[]> {
@@ -278,6 +293,56 @@ export class MonitoringService {
     const hardestItems = await this.buildHardestItems();
     const exhaustedByLevel = await this.buildExhaustedByLevel(users);
     return { hardestItems, exhaustedByLevel };
+  }
+
+  /**
+   * Talking agent — agregat org-wide rolling 7 hari (STATUS_WINDOW_DAYS, sama
+   * seperti definisi "Aktif" di Ringkasan). createdTimestamp adalah timestamp
+   * NYATA (bukan kolom Date), jadi batas jendela pakai wibDayInstant seperti
+   * buildTrendMap. Tiga query groupBy/aggregate/count — bukan raw SQL. Hanya
+   * row GRADED (PENDING belum punya durasi/cost asli). Tanpa rincian per-orang:
+   * angka org-wide murni agregat, tidak menampilkan siapa.
+   */
+  private async buildVoiceReport(today: Date): Promise<VoiceReportView> {
+    const start = wibDayInstant(addDays(today, -(STATUS_WINDOW_DAYS - 1)));
+    const end = wibDayInstant(addDays(today, 1));
+
+    const [agg, passedCount, byUser] = await Promise.all([
+      this.prisma.voiceConversation.aggregate({
+        where: {
+          status: 'GRADED',
+          createdAt: { gte: new Date(start), lt: new Date(end) },
+        },
+        _count: { _all: true },
+        _sum: { durationSecs: true, costCredits: true },
+      }),
+      this.prisma.voiceConversation.count({
+        where: {
+          status: 'GRADED',
+          passed: true,
+          createdAt: { gte: new Date(start), lt: new Date(end) },
+        },
+      }),
+      this.prisma.voiceConversation.groupBy({
+        by: ['userId'],
+        where: {
+          status: 'GRADED',
+          createdAt: { gte: new Date(start), lt: new Date(end) },
+        },
+        _count: { _all: true },
+      }),
+    ]);
+
+    const conversations7d = agg._count._all;
+    return {
+      conversations7d,
+      uniqueUsers7d: byUser.length,
+      minutes7d: Math.round((agg._sum.durationSecs ?? 0) / 60),
+      passRate7d: conversations7d
+        ? Math.round((passedCount / conversations7d) * 100)
+        : null,
+      costCredits7d: agg._sum.costCredits ?? 0,
+    };
   }
 
   private async buildHardestItems(): Promise<HardestItemView[]> {
@@ -632,7 +697,10 @@ export class MonitoringService {
       // (items.length === 0) tidak pernah "selesai", jadi level itu tidak
       // pernah "exhausted" — konsisten dengan semantik lama (map value per
       // lesson di lessonCompletion juga false utk lesson kosong).
-      exhaustedMap.set(u.id, lvlLessons.length > 0 && done === lvlLessons.length);
+      exhaustedMap.set(
+        u.id,
+        lvlLessons.length > 0 && done === lvlLessons.length,
+      );
     }
     return { lessonsDoneMap, exhaustedMap };
   }
@@ -659,6 +727,7 @@ export class MonitoringService {
       streakResult,
       attemptXpSum,
       sessionXpSum,
+      voiceXpSum,
       sessionCounts,
       firstTryAttempts,
       lessons,
@@ -673,6 +742,13 @@ export class MonitoringService {
       this.prisma.session.aggregate({
         where: { userId: id },
         _sum: { xpAwarded: true },
+      }),
+      this.prisma.voiceConversation.aggregate({
+        // GRADED-only: lihat buildVoiceReport — PENDING belum punya durasi
+        // asli. No-op untuk xpAwarded (PENDING selalu 0).
+        where: { userId: id, status: 'GRADED' },
+        _count: { _all: true },
+        _sum: { xpAwarded: true, durationSecs: true },
       }),
       this.prisma.session.groupBy({
         by: ['date'],
@@ -703,7 +779,9 @@ export class MonitoringService {
     ]);
 
     const xpTotal =
-      (attemptXpSum._sum.xpAwarded ?? 0) + (sessionXpSum._sum.xpAwarded ?? 0);
+      (attemptXpSum._sum.xpAwarded ?? 0) +
+      (sessionXpSum._sum.xpAwarded ?? 0) +
+      (voiceXpSum._sum.xpAwarded ?? 0);
 
     const countsByDate = new Map<string, number>();
     for (const g of sessionCounts) countsByDate.set(fmt(g.date), g._count._all);
@@ -752,6 +830,8 @@ export class MonitoringService {
       streak: streakResult.streak,
       longestStreak: streakResult.longest,
       xpTotal,
+      voiceConversations: voiceXpSum._count._all,
+      voiceMinutes: Math.round((voiceXpSum._sum.durationSecs ?? 0) / 60),
       calendar,
       skills,
       lessonHistory,

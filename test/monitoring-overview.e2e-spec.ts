@@ -61,7 +61,11 @@ describe('GET /admin/monitoring/overview (Task 1)', () => {
     });
   }
 
-  async function makeItem(lessonId: string, order: number, prompt = `Prompt ${order}`) {
+  async function makeItem(
+    lessonId: string,
+    order: number,
+    prompt = `Prompt ${order}`,
+  ) {
     return prisma.item.create({
       data: {
         lessonId,
@@ -101,7 +105,9 @@ describe('GET /admin/monitoring/overview (Task 1)', () => {
   }
 
   beforeAll(async () => {
-    const m = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    const m = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
     app = m.createNestApplication();
     await app.init();
     prisma = app.get(PrismaService);
@@ -124,6 +130,9 @@ describe('GET /admin/monitoring/overview (Task 1)', () => {
     await prisma.streakFreeze.deleteMany({
       where: { user: { email: { startsWith: 'p3m-' } } },
     });
+    await prisma.voiceConversation.deleteMany({
+      where: { user: { email: { startsWith: 'p3m-' } } },
+    });
     await prisma.item.deleteMany({
       where: { lesson: { code: { startsWith: 'P3M-' } } },
     });
@@ -144,9 +153,10 @@ describe('GET /admin/monitoring/overview (Task 1)', () => {
       // Baseline SEBELUM fixture kita ditambahkan — dipakai untuk delta,
       // karena totals/openReports adalah agregat global yang bisa
       // dipengaruhi suite e2e lain yang berjalan bersamaan.
-      const before = await get('/admin/monitoring/overview', admin.token).expect(
-        200,
-      );
+      const before = await get(
+        '/admin/monitoring/overview',
+        admin.token,
+      ).expect(200);
 
       const today = todayWIB();
 
@@ -184,7 +194,11 @@ describe('GET /admin/monitoring/overview (Task 1)', () => {
       // 2 lesson LIVE + item untuk hardestItems: 1 item dengan 6 firstTry
       // salah dari 8 -> wrongRate 75.
       const lesson1 = await makeLesson(`P3M-L1-${stamp}`, 900001);
-      const hardItem = await makeItem(lesson1.id, 1, 'Soal paling sering salah');
+      const hardItem = await makeItem(
+        lesson1.id,
+        1,
+        'Soal paling sering salah',
+      );
       const lesson2 = await makeLesson(`P3M-L2-${stamp}`, 900002);
       await makeItem(lesson2.id, 1);
 
@@ -192,14 +206,24 @@ describe('GET /admin/monitoring/overview (Task 1)', () => {
         data: { userId: userA.id, date: today, kind: 'REPLAY' },
       });
       for (let i = 0; i < 6; i++) {
-        await makeAttempt(userA.id, hardItem.id, scratchSession.id, false, true);
+        await makeAttempt(
+          userA.id,
+          hardItem.id,
+          scratchSession.id,
+          false,
+          true,
+        );
       }
       for (let i = 0; i < 2; i++) {
         await makeAttempt(userA.id, hardItem.id, scratchSession.id, true, true);
       }
 
       await prisma.itemReport.create({
-        data: { userId: userA.id, itemId: hardItem.id, note: 'Jawaban kunci salah' },
+        data: {
+          userId: userA.id,
+          itemId: hardItem.id,
+          note: 'Jawaban kunci salah',
+        },
       });
 
       // Snapshot TEPAT sebelum menambah user batas-jendela-aktif D & E, agar
@@ -315,7 +339,112 @@ describe('GET /admin/monitoring/overview (Task 1)', () => {
       }
 
       // --- openReports: delta vs baseline (>= karena bisa ada noise paralel) ---
-      expect(body.openReports - before.body.openReports).toBeGreaterThanOrEqual(1);
+      expect(body.openReports - before.body.openReports).toBeGreaterThanOrEqual(
+        1,
+      );
+    });
+  });
+
+  describe('overview: voice report (Ngobrol dengan AI, 7 hari)', () => {
+    // Meniru window BE persis (monitoring.service.ts#buildVoiceReport):
+    // rolling 7 hari WIB atas timestamp createdAt.
+    const H7 = 7 * 3600_000;
+    const windowStart = () =>
+      new Date(addDays(todayWIB(), -(7 - 1)).getTime() - H7);
+
+    /** Harapan dihitung langsung dari DB — tahan terhadap sisa percakapan
+     *  suite lain; logika = buildVoiceReport (GRADED saja, dalam window). */
+    async function expectedVoice() {
+      const where = {
+        status: 'GRADED' as const,
+        createdAt: { gte: windowStart() },
+      };
+      const [agg, passed, byUser] = await Promise.all([
+        prisma.voiceConversation.aggregate({
+          where,
+          _count: { _all: true },
+          _sum: { durationSecs: true, costCredits: true },
+        }),
+        prisma.voiceConversation.count({ where: { ...where, passed: true } }),
+        prisma.voiceConversation.groupBy({
+          by: ['userId'],
+          where,
+          _count: { _all: true },
+        }),
+      ]);
+      const convs = agg._count._all;
+      return {
+        conversations7d: convs,
+        uniqueUsers7d: byUser.length,
+        minutes7d: Math.round((agg._sum.durationSecs ?? 0) / 60),
+        passRate7d: convs ? Math.round((passed / convs) * 100) : null,
+        costCredits7d: agg._sum.costCredits ?? 0,
+      };
+    }
+
+    it('agregat 7 hari: GRADED dihitung, PENDING & yang lebih tua dari 7 hari di-exclude', async () => {
+      const admin = await makeUser({
+        name: 'P3M Voice Admin',
+        email: `p3m-voice-admin-${stamp}@ex.com`,
+        role: 'ADMIN',
+        onboardedAt: new Date(),
+      });
+      const u1 = await makeUser({
+        name: 'P3M Voice One',
+        email: `p3m-voice1-${stamp}@ex.com`,
+        onboardedAt: new Date(),
+      });
+      const u2 = await makeUser({
+        name: 'P3M Voice Two',
+        email: `p3m-voice2-${stamp}@ex.com`,
+        onboardedAt: new Date(),
+      });
+
+      // 3 GRADED dalam 7 hari (2 user), 1 PENDING (di-exclude), 1 GRADED 10
+      // hari lalu (di-exclude dari jendela).
+      const mk = (userId: string, over: Record<string, unknown>) =>
+        prisma.voiceConversation.create({
+          data: { userId, status: 'GRADED', ...over },
+        });
+      await mk(u1.id, {
+        durationSecs: 120,
+        costCredits: 10,
+        passed: true,
+        xpAwarded: 0,
+        gradedAt: new Date(),
+      });
+      await mk(u1.id, {
+        durationSecs: 45,
+        costCredits: 5,
+        passed: false,
+        xpAwarded: 0,
+        gradedAt: new Date(),
+      });
+      await mk(u2.id, {
+        durationSecs: 240,
+        costCredits: 20,
+        passed: true,
+        xpAwarded: 0,
+        gradedAt: new Date(),
+      });
+      await prisma.voiceConversation.create({
+        data: { userId: u1.id, status: 'PENDING' },
+      });
+      await mk(u2.id, {
+        durationSecs: 1000,
+        costCredits: 999,
+        passed: true,
+        xpAwarded: 0,
+        gradedAt: addDays(new Date(), -10),
+        createdAt: addDays(new Date(), -10),
+      });
+
+      const exp = await expectedVoice();
+      const body = (
+        await get('/admin/monitoring/overview', admin.token).expect(200)
+      ).body;
+
+      expect(body.voice).toEqual(exp);
     });
   });
 });

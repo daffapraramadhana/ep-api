@@ -182,6 +182,9 @@ describe('Journey / Progress / Item Report (Task 6)', () => {
 
   afterAll(async () => {
     // FK-safe cleanup, scoped to this file's own 'p2d-' / 'P2D-' prefixes.
+    await prisma.voiceConversation.deleteMany({
+      where: { user: { email: { startsWith: 'p2d-' } } },
+    });
     await prisma.itemReport.deleteMany({
       where: { user: { email: { startsWith: 'p2d-' } } },
     });
@@ -294,7 +297,9 @@ describe('Journey / Progress / Item Report (Task 6)', () => {
       const ourTopicIndexes = [topicGreet, topicFam].map((t) =>
         topicNames.indexOf(t),
       );
-      expect(ourTopicIndexes).toEqual([...ourTopicIndexes].sort((a, b) => a - b));
+      expect(ourTopicIndexes).toEqual(
+        [...ourTopicIndexes].sort((a, b) => a - b),
+      );
       expect(ourTopicIndexes.every((i) => i >= 0)).toBe(true);
 
       const greet = res.body.topics.find((t: any) => t.topic === topicGreet);
@@ -400,6 +405,24 @@ describe('Journey / Progress / Item Report (Task 6)', () => {
       await prisma.streakFreeze.create({
         data: { userId: user.id, weekStart: wStart, coveredDate: frozenDay },
       });
+
+      // Talking agent: 1 percakapan GRADED (hitung) + 1 PENDING (harus
+      // TIDAK ikut terhitung — belum punya durasi asli). 90s -> 2 menit.
+      await prisma.voiceConversation.create({
+        data: {
+          userId: user.id,
+          status: 'GRADED',
+          durationSecs: 90,
+          userTurnCount: 6,
+          costCredits: 4,
+          passed: true,
+          xpAwarded: 0,
+          gradedAt: new Date(),
+        },
+      });
+      await prisma.voiceConversation.create({
+        data: { userId: user.id, status: 'PENDING' },
+      });
     });
 
     it('skills dihitung dari firstTry saja; week active/frozen/empty; totals benar', async () => {
@@ -434,6 +457,9 @@ describe('Journey / Progress / Item Report (Task 6)', () => {
       expect(res.body.totals.lessonsDone).toBe(3);
       expect(typeof res.body.totals.xpTotal).toBe('number');
       expect(typeof res.body.totals.longestStreak).toBe('number');
+      // Talking agent: hanya GRADED yang dihitung (PENDING di-exclude).
+      expect(res.body.totals.voiceConversations).toBe(1);
+      expect(res.body.totals.voiceMinutes).toBe(2);
     });
   });
 
@@ -465,11 +491,9 @@ describe('Journey / Progress / Item Report (Task 6)', () => {
     });
 
     it('note < 3 karakter -> 400', async () => {
-      await post(
-        `/items/${itemId}/report`,
-        { note: 'ab' },
-        user.token,
-      ).expect(400);
+      await post(`/items/${itemId}/report`, { note: 'ab' }, user.token).expect(
+        400,
+      );
     });
 
     it('note > 500 karakter -> 400', async () => {

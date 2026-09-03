@@ -21,7 +21,14 @@ export interface ProgressWeekDayView {
 export interface ProgressView {
   skills: ProgressSkillView[];
   week: ProgressWeekDayView[];
-  totals: { lessonsDone: number; xpTotal: number; longestStreak: number };
+  totals: {
+    lessonsDone: number;
+    xpTotal: number;
+    longestStreak: number;
+    /** talking agent — percakapan GRADED & menit ngobrol (lifetime) */
+    voiceConversations: number;
+    voiceMinutes: number;
+  };
 }
 
 const SKILLS: SkillTag[] = ['VOCABULARY', 'GRAMMAR', 'LISTENING', 'READING'];
@@ -53,6 +60,7 @@ export class ProgressService {
       freezes,
       attemptXpSum,
       sessionXpSum,
+      voiceXpSum,
     ] = await Promise.all([
       this.prisma.attempt.findMany({
         where: { userId, firstTry: true },
@@ -80,6 +88,13 @@ export class ProgressService {
       this.prisma.session.aggregate({
         where: { userId },
         _sum: { xpAwarded: true },
+      }),
+      this.prisma.voiceConversation.aggregate({
+        // Filter GRADED: row PENDING belum punya durationSecs asli. No-op utk
+        // xpAwarded (PENDING selalu 0) — xpTotal existing tidak berubah.
+        where: { userId, status: 'GRADED' },
+        _count: { _all: true },
+        _sum: { xpAwarded: true, durationSecs: true },
       }),
     ]);
 
@@ -120,7 +135,9 @@ export class ProgressService {
       : new Map<string, boolean>();
     const lessonsDone = [...doneMap.values()].filter(Boolean).length;
     const xpTotal =
-      (attemptXpSum._sum.xpAwarded ?? 0) + (sessionXpSum._sum.xpAwarded ?? 0);
+      (attemptXpSum._sum.xpAwarded ?? 0) +
+      (sessionXpSum._sum.xpAwarded ?? 0) +
+      (voiceXpSum._sum.xpAwarded ?? 0);
 
     return {
       skills,
@@ -129,6 +146,8 @@ export class ProgressService {
         lessonsDone,
         xpTotal,
         longestStreak: streakResult.longest,
+        voiceConversations: voiceXpSum._count._all,
+        voiceMinutes: Math.round((voiceXpSum._sum.durationSecs ?? 0) / 60),
       },
     };
   }

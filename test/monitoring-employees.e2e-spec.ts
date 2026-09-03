@@ -316,6 +316,9 @@ describe('GET /admin/monitoring/employees (Task 2)', () => {
       expect(zetaDetail.body.calendar).toHaveLength(56);
       expect(Array.isArray(zetaDetail.body.skills)).toBe(true);
       expect(Array.isArray(zetaDetail.body.lessonHistory)).toBe(true);
+      // Talking agent: user tanpa percakapan -> 0 (field wajib ada).
+      expect(zetaDetail.body.voiceConversations).toBe(0);
+      expect(zetaDetail.body.voiceMinutes).toBe(0);
 
       // --- Detail userMid: kalender 56 hari dengan 4 state (met/partial/frozen/empty) ---
       // dailyTargetSessions default 1 -> 1 sesi COMPLETED sudah "met".
