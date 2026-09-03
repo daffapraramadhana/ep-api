@@ -12,6 +12,7 @@ import { MeModule } from './me/me.module';
 import { JourneyModule } from './journey/journey.module';
 import { ProgressModule } from './progress/progress.module';
 import { MonitoringModule } from './monitoring/monitoring.module';
+import { VoiceConversationModule } from './voice-conversation/voice-conversation.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { MonitoringModule } from './monitoring/monitoring.module';
     JourneyModule,
     ProgressModule,
     MonitoringModule,
+    VoiceConversationModule,
   ],
   controllers: [AppController],
   providers: [],

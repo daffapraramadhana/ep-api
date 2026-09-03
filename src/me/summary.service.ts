@@ -36,6 +36,9 @@ export interface SummaryView {
   /** sesi DAILY hari ini yang masih berjalan — Beranda menampilkan
    *  "LANJUTKAN" alih-alih menawarkan lesson baru. */
   openSession: OpenSessionView | null;
+  /** talking agent aktif (config VOICE_AGENT_ENABLED) — web memakai ini
+   *  utk menampilkan/menyembunyikan kartu "Ngobrol dengan AI" tanpa deploy. */
+  voiceAgentEnabled: boolean;
 }
 
 @Injectable()
@@ -57,12 +60,14 @@ export class SummaryService {
       streakResult,
       attemptXpSum,
       sessionXpSum,
+      voiceXpSum,
       sessionsCompletedToday,
       reviewsDue,
       thisWeekFreeze,
       xpFirstTry,
       xpSessionComplete,
       xpPerfectSession,
+      voiceAgentEnabled,
       nextLesson,
     ] = await Promise.all([
       this.streak.evaluate(userId),
@@ -71,6 +76,10 @@ export class SummaryService {
         _sum: { xpAwarded: true },
       }),
       this.prisma.session.aggregate({
+        where: { userId },
+        _sum: { xpAwarded: true },
+      }),
+      this.prisma.voiceConversation.aggregate({
         where: { userId },
         _sum: { xpAwarded: true },
       }),
@@ -88,11 +97,17 @@ export class SummaryService {
       this.config.getInt('XP_FIRST_TRY'),
       this.config.getInt('XP_SESSION_COMPLETE'),
       this.config.getInt('XP_PERFECT_SESSION'),
+      this.config.getInt('VOICE_AGENT_ENABLED'),
       this.getNextLesson(userId, user.level),
     ]);
 
+    // XP talking agent (XP_VOICE_CONVERSATION) adalah suku ketiga independen —
+    // TIDAK masuk target sesi harian/streak (keputusan desain §3 dokumen plan),
+    // tapi tetap dihitung ke total XP user.
     const xpTotal =
-      (attemptXpSum._sum.xpAwarded ?? 0) + (sessionXpSum._sum.xpAwarded ?? 0);
+      (attemptXpSum._sum.xpAwarded ?? 0) +
+      (sessionXpSum._sum.xpAwarded ?? 0) +
+      (voiceXpSum._sum.xpAwarded ?? 0);
 
     const nextLessonView: NextLessonView | null = nextLesson
       ? {
@@ -121,6 +136,7 @@ export class SummaryService {
       contentExhausted: nextLessonView === null,
       nextLesson: nextLessonView,
       openSession,
+      voiceAgentEnabled: voiceAgentEnabled === 1,
     };
   }
 

@@ -9,6 +9,13 @@ const CONFIG: Record<string, string> = {
   REVIEW_MAX_PER_SESSION: '3',
   MONITOR_INACTIVE_DAYS: '5',
   SPEAKING_MATCH_THRESHOLD: '70',
+  // Talking agent (ElevenLabs) — cap & XP. Angka starting point, tunable.
+  VOICE_AGENT_ENABLED: '0',
+  VOICE_DAILY_CAP: '1',
+  VOICE_WEEKLY_CAP: '4',
+  VOICE_MIN_DURATION_SECS: '60',
+  VOICE_MIN_USER_TURNS: '4',
+  XP_VOICE_CONVERSATION: '40', // 2 × XP_SESSION_COMPLETE (20)
 };
 
 async function main() {

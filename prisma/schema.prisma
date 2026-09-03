@@ -75,6 +75,11 @@ enum SessionKind {
   SPEAKING
 }
 
+enum VoiceConversationStatus {
+  PENDING // kredensial diminta, panggilan mungkin belum/sedang berlangsung, webhook belum datang
+  GRADED // webhook sudah diproses — passed + xpAwarded final
+}
+
 model User {
   id           String  @id @default(cuid())
   name         String
@@ -94,6 +99,7 @@ model User {
   reviewQueue  ReviewQueue[]
   itemReports  ItemReport[]
   streakFreezes StreakFreeze[]
+  voiceConversations VoiceConversation[]
 }
 
 model Lesson {
@@ -210,4 +216,30 @@ model StreakFreeze {
   coveredDate DateTime @db.Date
   usedAt      DateTime @default(now())
   @@id([userId, weekStart])
+}
+
+// Percakapan suara dua arah real-time (ElevenLabs) — sesi mandiri, TIDAK
+// bagian dari Session/SessionItem/Attempt (tidak ada "item" diskrit untuk
+// direkam percobaannya; grading holistik dari transcript via webhook async).
+model VoiceConversation {
+  id                       String @id @default(cuid())
+  userId                   String
+  user                     User @relation(fields: [userId], references: [id])
+  // ID sisi ElevenLabs — null sampai webhook datang; hanya untuk
+  // ketertelusuran/dukungan, BUKAN kunci lookup utama (lookup pakai id kita
+  // sendiri via dynamic_variables di webhook).
+  elevenlabsConversationId String? @unique
+  status                   VoiceConversationStatus @default(PENDING)
+  durationSecs             Int? // data.metadata.call_duration_secs
+  userTurnCount            Int? // count(transcript[].role === 'user')
+  costCredits              Int? // data.metadata.cost
+  // Transcript verbatim — append-only (filosofi sama dengan attempt): tidak
+  // pernah dihapus, bahan mentah untuk feedback LLM (Fase C) tanpa re-fetch
+  // (webhook = push sekali, tidak bisa di-replay).
+  transcript               Json?
+  passed                   Boolean?
+  xpAwarded                Int @default(0)
+  createdAt                DateTime @default(now()) // = waktu mint token
+  gradedAt                 DateTime?
+  @@index([userId, createdAt])
 }
