@@ -73,6 +73,7 @@ enum SessionKind {
   DAILY
   REPLAY
   SPEAKING
+  MODULE
 }
 
 enum VoiceConversationStatus {
@@ -113,6 +114,7 @@ model Lesson {
   order  Int
   status ContentStatus @default(DRAFT)
   items  Item[]
+  moduleChapter ModuleChapter?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -148,6 +150,8 @@ model Session {
   status      SessionStatus @default(IN_PROGRESS)
   kind        SessionKind @default(DAILY)
   xpAwarded   Int @default(0)
+  moduleChapterId String?
+  moduleChapter   ModuleChapter? @relation(fields: [moduleChapterId], references: [id])
   completedAt DateTime?
   items       SessionItem[]
   attempts    Attempt[]
@@ -242,4 +246,39 @@ model VoiceConversation {
   createdAt                DateTime @default(now()) // = waktu mint token
   gradedAt                 DateTime?
   @@index([userId, createdAt])
+}
+
+// Menu Modul (spec 2026-10-14-menu-modul-design.md). Modul = wadah bab
+// bacaan; kuis bab = Lesson biasa yang ditautkan (lessonId unik). Tidak ada
+// tabel progres — progres diturunkan dari attempt saat request.
+model Module {
+  id        String @id @default(cuid())
+  slug      String @unique
+  title     String
+  summary   String
+  level     Level
+  cefr      Cefr
+  coverFile String?
+  order     Int
+  status    ContentStatus @default(DRAFT)
+  chapters  ModuleChapter[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ModuleChapter {
+  id         String @id @default(cuid())
+  moduleId   String
+  module     Module @relation(fields: [moduleId], references: [id])
+  order      Int
+  title      String
+  estMinutes Int
+  body       String  // Markdown — sumber kebenaran
+  blocks     Json    // hasil parseChapter (cache), selalu sinkron dengan body
+  lessonId   String? @unique
+  lesson     Lesson? @relation(fields: [lessonId], references: [id])
+  sessions   Session[]
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  @@unique([moduleId, order])
 }
