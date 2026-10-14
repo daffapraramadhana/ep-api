@@ -228,4 +228,44 @@ describe('parseChapter', () => {
       { line: 1, message: 'Daftar bertingkat belum didukung' },
     ]);
   });
+
+  // --- temuan review akhir ---
+  it('pembuka directive dengan spasi (::: tip) dikenali', () => {
+    const { blocks } = ok('Intro\n\n::: tip\nA\n:::');
+    expect(blocks).toEqual([
+      { type: 'paragraph', text: [{ t: 'Intro' }] },
+      { type: 'tip', text: [[{ t: 'A' }]] },
+    ]);
+  });
+
+  it('media: dengan nama berspasi / non-ASCII di-decode', () => {
+    const r = ok('![a](<media:Contoh Email.png>)\n\n![b](media:café.png)');
+    expect(r.media.map((m) => m.file)).toEqual([
+      'Contoh Email.png',
+      'café.png',
+    ]);
+    expect(r.blocks[0]).toEqual({
+      type: 'image',
+      file: 'Contoh Email.png',
+      alt: 'a',
+    });
+  });
+
+  it('blok kode di dalam item daftar ditolak, bukan dibuang diam-diam', () => {
+    expect(errs('- satu\n\n      kode\n- dua')).toEqual([
+      { line: 3, message: 'Format "blok kode" belum didukung di dalam daftar' },
+    ]);
+  });
+
+  it('kutipan di dalam item daftar ditolak', () => {
+    expect(errs('- satu\n  > kutip\n- dua')).toEqual([
+      { line: 2, message: 'Format "kutipan" belum didukung di dalam daftar' },
+    ]);
+  });
+
+  it('item daftar dengan lebih dari satu paragraf ditolak', () => {
+    expect(errs('- satu\n\n  lanjutan\n- dua')).toEqual([
+      { line: 3, message: 'Satu butir daftar hanya boleh satu paragraf' },
+    ]);
+  });
 });

@@ -55,7 +55,8 @@ type Token = ReturnType<MarkdownIt['parse']>[number];
 
 const DIRECTIVES = ['phrases', 'dialog', 'tip'];
 const AUDIO_EXT = /\.(mp3|m4a|wav|ogg|webm)$/i;
-const OPEN_RE = /^:::([A-Za-z][\w-]*)$/;
+// `::: tip` (spasi) adalah gaya umum sumber luar (markdown-it-container, VuePress).
+const OPEN_RE = /^:::\s*([A-Za-z][\w-]*)\s*$/;
 const DIALOG_RE = /^([^:()]+?)\s*(?:\(([^)]*)\))?\s*:\s*(.+)$/;
 
 const md = new MarkdownIt('default', {
@@ -74,6 +75,21 @@ const UNSUPPORTED: Record<string, string> = {
   hr: 'garis pemisah',
   html_block: 'HTML',
 };
+
+const LIST_UNSUPPORTED: Record<string, string> = {
+  ...UNSUPPORTED,
+  heading_open: 'judul',
+  table_open: 'tabel',
+};
+
+/** markdown-it meng-encode tujuan tautan (spasi → %20, é → %C3%A9); nama file Media asli tidak. */
+function decodeMediaName(raw: string): string {
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
 
 interface Ctx {
   blocks: StoredBlock[];
@@ -307,7 +323,7 @@ function convertMarkdown(chunk: string[], offset: number, ctx: Ctx) {
           });
           continue;
         }
-        const file = src.slice(6);
+        const file = decodeMediaName(src.slice(6));
         ctx.media.push({ file, line: lineOf(tok) });
         ctx.blocks.push(
           AUDIO_EXT.test(file)
@@ -324,27 +340,45 @@ function convertMarkdown(chunk: string[], offset: number, ctx: Ctx) {
     }
 
     if (tok.type === 'bullet_list_open' || tok.type === 'ordered_list_open') {
+      // Struktur yang didukung: list(0) > list_item(1) > paragraph(2) > inline(3).
+      // Apa pun selain itu di dalam daftar dilaporkan — tidak boleh hilang diam-diam.
       const closeType = tok.type.replace('_open', '_close');
       const items: Inline[] = [];
+      const before = ctx.errors.length;
       let nested = false;
+      let parasInItem = 0;
       let e = k + 1;
       for (; e < tokens.length; e++) {
         const t = tokens[e];
         if (t.type === closeType && t.level === 0) break;
-        if (
+        const line = offset + 1 + (t.map?.[0] ?? 0);
+        if (t.type === 'list_item_open' && t.level === 1) parasInItem = 0;
+        else if (
           (t.type === 'bullet_list_open' || t.type === 'ordered_list_open') &&
           t.level > 0
         )
           nested = true;
-        if (t.type === 'inline')
-          items.push(toInline(t, offset + 1 + (t.map?.[0] ?? 0), ctx));
+        else if (t.type === 'paragraph_open' && t.level === 2) {
+          parasInItem += 1;
+          if (parasInItem === 2)
+            ctx.errors.push({
+              line,
+              message: 'Satu butir daftar hanya boleh satu paragraf',
+            });
+        } else if (t.type === 'inline' && t.level === 3) {
+          if (parasInItem === 1) items.push(toInline(t, line, ctx));
+        } else if (LIST_UNSUPPORTED[t.type] && !nested)
+          ctx.errors.push({
+            line,
+            message: `Format "${LIST_UNSUPPORTED[t.type]}" belum didukung di dalam daftar`,
+          });
       }
       if (nested)
         ctx.errors.push({
           line: lineOf(tok),
           message: 'Daftar bertingkat belum didukung',
         });
-      else
+      else if (ctx.errors.length === before)
         ctx.blocks.push({
           type: 'list',
           ordered: tok.type === 'ordered_list_open',
