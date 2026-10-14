@@ -297,7 +297,7 @@ export class SessionService {
         include: { module: true },
       });
       if (!chapter || chapter.module.status !== 'LIVE')
-        throw new NotFoundException();
+        throw new NotFoundException('Modul atau bab tidak ditemukan');
 
       const open = await tx.session.findFirst({
         where: {

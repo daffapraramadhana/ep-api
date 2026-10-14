@@ -16,6 +16,9 @@ import type {
   ModulesView,
 } from './modules.types';
 
+/** Pesan 404 yang dilihat user (link lama / modul ditarik ke DRAFT). */
+export const MODULE_NOT_FOUND = 'Modul atau bab tidak ditemukan';
+
 const chapterSelect = {
   id: true,
   order: true,
@@ -135,7 +138,7 @@ export class ModulesService {
 
   async detail(userId: string, slug: string): Promise<ModuleDetailView> {
     const [m] = await this.loadLive({ slug });
-    if (!m) throw new NotFoundException();
+    if (!m) throw new NotFoundException(MODULE_NOT_FOUND);
     const rows = this.rows(m, await this.progressFor(userId, [m]));
     return {
       ...this.card(m, rows),
@@ -150,11 +153,11 @@ export class ModulesService {
     orderParam: string,
   ): Promise<ChapterView> {
     const order = Number(orderParam);
-    if (!Number.isInteger(order)) throw new NotFoundException();
+    if (!Number.isInteger(order)) throw new NotFoundException(MODULE_NOT_FOUND);
     const [m] = await this.loadLive({ slug });
-    if (!m) throw new NotFoundException();
+    if (!m) throw new NotFoundException(MODULE_NOT_FOUND);
     const idx = m.chapters.findIndex((c) => c.order === order);
-    if (idx < 0) throw new NotFoundException();
+    if (idx < 0) throw new NotFoundException(MODULE_NOT_FOUND);
     const ch = await this.prisma.moduleChapter.findUniqueOrThrow({
       where: { id: m.chapters[idx].id },
     });

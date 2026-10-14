@@ -288,10 +288,12 @@ describe('modul untuk user', () => {
   });
 
   it('404 untuk modul DRAFT, slug tak dikenal, bab tak ada', async () => {
-    await get(`/modules/${slugDraft}`).expect(404);
+    const d = await get(`/modules/${slugDraft}`).expect(404);
+    expect(d.body.message).toBe('Modul atau bab tidak ditemukan');
     await get(`/modules/${slugDraft}/chapters/1`).expect(404);
     await get('/modules/tidak-ada').expect(404);
-    await get(`/modules/${slugA}/chapters/9`).expect(404);
+    const c = await get(`/modules/${slugA}/chapters/9`).expect(404);
+    expect(c.body.message).toBe('Modul atau bab tidak ditemukan');
     await get(`/modules/${slugA}/chapters/abc`).expect(404);
   });
 

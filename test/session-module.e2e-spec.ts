@@ -254,7 +254,10 @@ describe('POST /session/module (kuis bab)', () => {
       409,
     );
     expect(r.body.message).toBe('Kuis bab ini belum tersedia');
-    await post('/session/module', { chapterId: chDraftModule }).expect(404);
+    const draft = await post('/session/module', {
+      chapterId: chDraftModule,
+    }).expect(404);
+    expect(draft.body.message).toBe('Modul atau bab tidak ditemukan');
     await post('/session/module', { chapterId: 'tidak-ada' }).expect(404);
     await post('/session/module', {}).expect(400);
   });
