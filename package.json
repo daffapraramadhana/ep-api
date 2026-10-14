@@ -20,6 +20,7 @@
     "test:e2e": "jest --config ./test/jest-e2e.json --runInBand",
     "template": "ts-node scripts/generate-template.ts",
     "seed:demo": "ts-node prisma/seed-demo.ts",
+    "seed:complaints": "ts-node prisma/seed-complaints.ts",
     "audio:push:minio": "ts-node scripts/upload-audio-minio.ts"
   },
   "dependencies": {
