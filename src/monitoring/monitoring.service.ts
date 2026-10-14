@@ -11,6 +11,7 @@ import {
   computeTrend,
   metDays,
 } from './metrics';
+import { COUNTED_SESSION_KINDS, PATH_LESSON } from '../common/content-scope';
 
 const LEVELS: Level[] = ['DASAR', 'MENENGAH', 'MAHIR'];
 const SKILLS: SkillTag[] = ['VOCABULARY', 'GRAMMAR', 'LISTENING', 'READING'];
@@ -187,7 +188,7 @@ export class MonitoringService {
     const grouped = await this.prisma.session.groupBy({
       by: ['date'],
       where: {
-        kind: { in: ['DAILY', 'SPEAKING'] },
+        kind: { in: COUNTED_SESSION_KINDS },
         status: 'COMPLETED',
         date: { gte: start, lte: today },
       },
@@ -221,7 +222,7 @@ export class MonitoringService {
       ? await this.prisma.session.findMany({
           where: {
             userId: { in: users.map((u) => u.id) },
-            kind: { in: ['DAILY', 'SPEAKING'] },
+            kind: { in: COUNTED_SESSION_KINDS },
             status: 'COMPLETED',
             date: { gte: windowStart, lte: today },
           },
@@ -462,7 +463,7 @@ export class MonitoringService {
         this.prisma.session.findMany({
           where: {
             userId: { in: userIds },
-            kind: { in: ['DAILY', 'SPEAKING'] },
+            kind: { in: COUNTED_SESSION_KINDS },
             status: 'COMPLETED',
             date: { gte: windowStart, lte: today },
           },
@@ -472,7 +473,7 @@ export class MonitoringService {
           by: ['userId'],
           where: {
             userId: { in: userIds },
-            kind: { in: ['DAILY', 'SPEAKING'] },
+            kind: { in: COUNTED_SESSION_KINDS },
             status: 'COMPLETED',
           },
           _max: { completedAt: true },
@@ -643,7 +644,7 @@ export class MonitoringService {
     if (!levelsUsed.length) return { lessonsDoneMap, exhaustedMap };
 
     const lessons = await this.prisma.lesson.findMany({
-      where: { level: { in: levelsUsed }, status: 'LIVE' },
+      where: { level: { in: levelsUsed }, status: 'LIVE', ...PATH_LESSON },
       select: {
         id: true,
         level: true,
@@ -754,7 +755,7 @@ export class MonitoringService {
         by: ['date'],
         where: {
           userId: id,
-          kind: { in: ['DAILY', 'SPEAKING'] },
+          kind: { in: COUNTED_SESSION_KINDS },
           status: 'COMPLETED',
           date: { gte: calendarStart, lte: today },
         },
@@ -769,7 +770,7 @@ export class MonitoringService {
       }),
       user.level
         ? this.prisma.lesson.findMany({
-            where: { level: user.level, status: 'LIVE' },
+            where: { level: user.level, status: 'LIVE', ...PATH_LESSON },
             orderBy: { order: 'asc' },
             include: {
               items: { where: { status: 'LIVE' }, select: { id: true } },

@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { SessionService } from '../session/session.service';
 import { StreakService } from '../me/streak.service';
 import { addDays, todayWIB, weekStartWIB } from '../common/wib';
+import { COUNTED_SESSION_KINDS } from '../common/content-scope';
 
 type WeekDayState = 'active' | 'frozen' | 'empty';
 
@@ -72,7 +73,7 @@ export class ProgressService {
       this.prisma.session.findMany({
         where: {
           userId,
-          kind: { in: ['DAILY', 'SPEAKING'] },
+          kind: { in: COUNTED_SESSION_KINDS },
           status: 'COMPLETED',
           date: { gte: weekStart, lte: weekEnd },
         },

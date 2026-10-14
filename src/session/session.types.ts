@@ -15,7 +15,7 @@ export interface SessionItemView {
 
 export interface SessionView {
   id: string;
-  kind: 'DAILY' | 'REPLAY' | 'SPEAKING';
+  kind: 'DAILY' | 'REPLAY' | 'SPEAKING' | 'MODULE';
   status: 'IN_PROGRESS' | 'COMPLETED';
   lessonTitle: string | null;
   items: SessionItemView[];

@@ -14,6 +14,7 @@ import { StorageService } from '../storage/storage.service';
 import { STT_TRANSCRIBER } from '../speech/groq-stt.service';
 import type { SttTranscriber } from '../speech/groq-stt.service';
 import { gradeAnswer } from './grading';
+import { COUNTED_SESSION_KINDS } from '../common/content-scope';
 
 // WIB day boundaries, expressed as real UTC instants (see src/common/wib.ts —
 // todayWIB()/addDays() return the WIB *calendar day* encoded as a UTC
@@ -313,7 +314,7 @@ export class AnswerService {
         const perfect = correctFirstCount === allItemIds.length;
 
         let bonusXp = 0;
-        if (session.kind === 'DAILY' || session.kind === 'SPEAKING') {
+        if (COUNTED_SESSION_KINDS.includes(session.kind)) {
           bonusXp += xpSessionComplete;
           if (perfect) bonusXp += xpPerfectSession;
         }

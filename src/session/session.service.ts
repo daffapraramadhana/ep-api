@@ -10,6 +10,7 @@ import { StorageService } from '../storage/storage.service';
 import { AppConfigService } from '../common/config.service';
 import { todayWIB } from '../common/wib';
 import { SessionItemView, SessionView } from './session.types';
+import { PATH_LESSON } from '../common/content-scope';
 
 /**
  * Hash a string into a uint32 seed (FNV-1a variant) so the same
@@ -354,7 +355,7 @@ export class SessionService {
     db: Db = this.prisma,
   ) {
     const lessons = await db.lesson.findMany({
-      where: { level, status: 'LIVE' },
+      where: { level, status: 'LIVE', ...PATH_LESSON },
       orderBy: { order: 'asc' },
       include: { items: { where: { status: 'LIVE' }, select: { id: true } } },
     });
@@ -407,7 +408,7 @@ export class SessionService {
     db: Db = this.prisma,
   ): Promise<string[]> {
     const attempts = await db.attempt.findMany({
-      where: { userId, item: { status: 'LIVE' } },
+      where: { userId, item: { status: 'LIVE', lesson: PATH_LESSON } },
       select: { itemId: true, correct: true, answeredAt: true },
     });
     if (!attempts.length) return [];

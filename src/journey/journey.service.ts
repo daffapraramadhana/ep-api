@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionService } from '../session/session.service';
+import { PATH_LESSON } from '../common/content-scope';
 
 type LessonState = 'done' | 'now' | 'locked';
 
@@ -45,7 +46,7 @@ export class JourneyService {
     if (!user?.level) return { topics: [] };
 
     const lessons = await this.prisma.lesson.findMany({
-      where: { level: user.level, status: 'LIVE' },
+      where: { level: user.level, status: 'LIVE', ...PATH_LESSON },
       orderBy: { order: 'asc' },
       include: { items: { where: { status: 'LIVE' }, select: { id: true } } },
     });

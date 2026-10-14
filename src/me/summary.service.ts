@@ -5,6 +5,7 @@ import { AppConfigService } from '../common/config.service';
 import { SessionService } from '../session/session.service';
 import { StreakService } from './streak.service';
 import { todayWIB, weekStartWIB } from '../common/wib';
+import { COUNTED_SESSION_KINDS, PATH_LESSON } from '../common/content-scope';
 
 export interface NextLessonView {
   id: string;
@@ -84,7 +85,7 @@ export class SummaryService {
         _sum: { xpAwarded: true },
       }),
       this.prisma.session.count({
-        where: { userId, kind: { in: ['DAILY', 'SPEAKING'] }, status: 'COMPLETED', date: today },
+        where: { userId, kind: { in: COUNTED_SESSION_KINDS }, status: 'COMPLETED', date: today },
       }),
       this.prisma.reviewQueue.count({
         where: { userId, dueDate: { lte: today }, item: { status: 'LIVE' } },
@@ -149,6 +150,7 @@ export class SummaryService {
   /** Sesi DAILY hari ini yang IN_PROGRESS (beku) — untuk CTA "LANJUTKAN". */
   private async getOpenSession(userId: string, today: Date): Promise<OpenSessionView | null> {
     const open = await this.prisma.session.findFirst({
+      // Sengaja BUKAN COUNTED_SESSION_KINDS: sesi kuis bab dilanjutkan dari halaman modul.
       where: { userId, date: today, kind: { in: ['DAILY', 'SPEAKING'] }, status: 'IN_PROGRESS' },
       include: {
         items: {
@@ -180,7 +182,7 @@ export class SummaryService {
     if (!level) return null;
 
     const lessons = await this.prisma.lesson.findMany({
-      where: { level, status: 'LIVE' },
+      where: { level, status: 'LIVE', ...PATH_LESSON },
       orderBy: { order: 'asc' },
       include: { items: { where: { status: 'LIVE' }, select: { id: true } } },
     });

@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { addDays, todayWIB, weekStartWIB } from '../common/wib';
 import { StreakEvaluator } from '../session/answer.service';
+import { COUNTED_SESSION_KINDS } from '../common/content-scope';
 
 // Any Prisma client shape with the model delegates evaluate() needs — either
 // the app-wide PrismaService or an interactive-transaction client. Accepting
@@ -23,7 +24,7 @@ const MILESTONES = [7, 30, 100] as const;
  * Streak + lazy weekly freeze engine.
  *
  * Rules (see task-5 brief):
- * - A WIB day is "met" when count(Session{userId,kind:DAILY,status:COMPLETED,
+ * - A WIB day is "met" when count(Session{userId,kind IN COUNTED_SESSION_KINDS,status:COMPLETED,
  *   date:d}) >= user's CURRENT dailyTargetSessions.
  * - Walking backward from today: today may be unmet without breaking the
  *   streak (the day isn't over yet) — it simply doesn't count either way.
@@ -102,7 +103,7 @@ export class StreakService implements StreakEvaluator {
     const completedToday = await tx.session.count({
       where: {
         userId,
-        kind: { in: ['DAILY', 'SPEAKING'] },
+        kind: { in: COUNTED_SESSION_KINDS },
         status: 'COMPLETED',
         date: todayWIB(),
       },
@@ -133,7 +134,7 @@ export class StreakService implements StreakEvaluator {
     const sessions = await db.session.findMany({
       where: {
         userId,
-        kind: { in: ['DAILY', 'SPEAKING'] },
+        kind: { in: COUNTED_SESSION_KINDS },
         status: 'COMPLETED',
         date: { gte: windowStart },
       },
