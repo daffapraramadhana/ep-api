@@ -155,7 +155,7 @@ describe('parseChapter', () => {
     ]);
   });
 
-  it('blok tidak ditutup lalu ada blok lain — keduanya dilaporkan dengan benar', () => {
+  it('blok tidak ditutup lalu ada blok lain — satu error, blok berikutnya dilewati utuh', () => {
     expect(errs(':::tip\nA\n:::phrases\n- a | b\n:::')).toEqual([
       { line: 1, message: 'Blok ":::tip" belum ditutup dengan ":::"' },
     ]);
@@ -266,6 +266,42 @@ describe('parseChapter', () => {
   it('item daftar dengan lebih dari satu paragraf ditolak', () => {
     expect(errs('- satu\n\n  lanjutan\n- dua')).toEqual([
       { line: 3, message: 'Satu butir daftar hanya boleh satu paragraf' },
+    ]);
+  });
+
+  it('error di baris tabel menunjuk baris yang salah, bukan baris pertama tabel', () => {
+    expect(
+      errs('| A | B |\n|---|---|\n| x | y |\n| [z](javascript:1) | w |'),
+    ).toEqual([
+      { line: 4, message: 'Tautan harus diawali http:// atau https://' },
+    ]);
+  });
+
+  it('frasa bernomor "1. " / "1) " dibersihkan', () => {
+    const { blocks } = ok(
+      ':::phrases\n1. Sorry. | Maaf.\n2) Thanks. | Terima kasih.\n:::',
+    );
+    expect(blocks).toEqual([
+      {
+        type: 'phrases',
+        items: [
+          { en: 'Sorry.', id: 'Maaf.' },
+          { en: 'Thanks.', id: 'Terima kasih.' },
+        ],
+      },
+    ]);
+  });
+
+  it('penanda tebal/miring/kode di frasa & dialog dibuang (bukan tampil literal)', () => {
+    const { blocks } = ok(
+      ':::phrases\n- **Sorry** for *that*. | Maaf `ya`.\n:::\n\n:::dialog\nA: I am **sure**.\n:::',
+    );
+    expect(blocks).toEqual([
+      { type: 'phrases', items: [{ en: 'Sorry for that.', id: 'Maaf ya.' }] },
+      {
+        type: 'dialog',
+        lines: [{ speaker: 'A', side: 'left', text: 'I am sure.' }],
+      },
     ]);
   });
 });

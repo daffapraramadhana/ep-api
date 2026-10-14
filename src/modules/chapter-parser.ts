@@ -91,6 +91,18 @@ function decodeMediaName(raw: string): string {
   }
 }
 
+/**
+ * Frasa & dialog dirender sebagai teks polos (juga dibacakan TTS), jadi
+ * penanda Markdown inline dibuang supaya tidak tampil literal.
+ */
+function stripInlineMarks(t: string): string {
+  return t
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/__(.+?)__/g, '$1')
+    .replace(/\*(.+?)\*/g, '$1')
+    .replace(/`(.+?)`/g, '$1');
+}
+
 interface Ctx {
   blocks: StoredBlock[];
   errors: ParseError[];
@@ -197,9 +209,9 @@ function convertDirective(
     const items: { en: string; id: string; note?: string }[] = [];
     for (const r of rows) {
       const parts = r.text
-        .replace(/^[-*]\s+/, '')
+        .replace(/^(?:[-*]|\d+[.)])\s+/, '')
         .split('|')
-        .map((p) => p.trim());
+        .map((p) => stripInlineMarks(p.trim()));
       if (parts.length < 2 || !parts[0] || !parts[1]) {
         ctx.errors.push({
           line: r.line,
@@ -251,7 +263,7 @@ function convertDirective(
         speaker,
         ...(role ? { role } : {}),
         side: sides.get(key)!,
-        text: m[3].trim(),
+        text: stripInlineMarks(m[3].trim()),
       });
     }
     if (out.length) ctx.blocks.push({ type: 'dialog', lines: out });
@@ -393,15 +405,18 @@ function convertMarkdown(chunk: string[], offset: number, ctx: Ctx) {
       const rows: Inline[][] = [];
       let inHead = false;
       let row: Inline[] = [];
+      let rowLine = lineOf(tok);
       let e = k + 1;
       for (; e < tokens.length && tokens[e].type !== 'table_close'; e++) {
         const t = tokens[e];
         if (t.type === 'thead_open') inHead = true;
         else if (t.type === 'thead_close') inHead = false;
-        else if (t.type === 'tr_open') row = [];
-        else if (t.type === 'tr_close' && !inHead) rows.push(row);
+        else if (t.type === 'tr_open') {
+          row = [];
+          rowLine = offset + 1 + (t.map?.[0] ?? 0);
+        } else if (t.type === 'tr_close' && !inHead) rows.push(row);
         else if (t.type === 'inline') {
-          const cell = toInline(t, lineOf(tok), ctx);
+          const cell = toInline(t, rowLine, ctx);
           if (inHead) head.push(cell);
           else row.push(cell);
         }
