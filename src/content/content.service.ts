@@ -20,6 +20,7 @@ export interface LessonListItem {
   status: string;
   itemCount: number;
   liveItemCount: number;
+  moduleChapter: { moduleTitle: string; order: number } | null;
 }
 
 export interface LessonListQuery {
@@ -92,7 +93,12 @@ export class ContentService {
         ...(query.topic ? { topic: query.topic } : {}),
       },
       orderBy: [{ level: 'asc' }, { order: 'asc' }],
-      include: { items: { select: { status: true } } },
+      include: {
+        items: { select: { status: true } },
+        moduleChapter: {
+          select: { order: true, module: { select: { title: true } } },
+        },
+      },
     });
     return lessons.map((l) => ({
       id: l.id,
@@ -106,6 +112,12 @@ export class ContentService {
       status: l.status,
       itemCount: l.items.length,
       liveItemCount: l.items.filter((i) => i.status === 'LIVE').length,
+      moduleChapter: l.moduleChapter
+        ? {
+            moduleTitle: l.moduleChapter.module.title,
+            order: l.moduleChapter.order,
+          }
+        : null,
     }));
   }
 

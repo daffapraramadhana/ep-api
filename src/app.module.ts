@@ -13,6 +13,7 @@ import { JourneyModule } from './journey/journey.module';
 import { ProgressModule } from './progress/progress.module';
 import { MonitoringModule } from './monitoring/monitoring.module';
 import { VoiceConversationModule } from './voice-conversation/voice-conversation.module';
+import { ModulesModule } from './modules/modules.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { VoiceConversationModule } from './voice-conversation/voice-conversation
     ProgressModule,
     MonitoringModule,
     VoiceConversationModule,
+    ModulesModule,
   ],
   controllers: [AppController],
   providers: [],
