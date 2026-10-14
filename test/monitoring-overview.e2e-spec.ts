@@ -5,6 +5,7 @@ import request from 'supertest';
 import * as bcrypt from 'bcrypt';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { COUNTED_SESSION_KINDS } from '../src/common/content-scope';
 import { todayWIB, addDays } from '../src/common/wib';
 
 const PASSWORD = 'Password123!';
@@ -272,7 +273,8 @@ describe('GET /admin/monitoring/overview (Task 1)', () => {
       const sessionCountQuery = () =>
         prisma.session.count({
           where: {
-            kind: 'DAILY',
+            // Sama dengan definisi aktivitas di monitoring (DAILY/SPEAKING/MODULE).
+            kind: { in: COUNTED_SESSION_KINDS },
             status: 'COMPLETED',
             date: { gte: windowStart, lte: today },
           },
