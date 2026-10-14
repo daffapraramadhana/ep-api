@@ -278,6 +278,82 @@ export class SessionService {
     return this.view(session.id, userId);
   }
 
+  /**
+   * Kuis bab modul (spec §5.4). Pola getOrCreateToday: transaksi + advisory
+   * lock + resume sesi terbuka hari ini untuk bab yang sama + handling yatim.
+   * Lesson belum tuntas → MODULE (dihitung target/streak/bonus); sudah tuntas
+   * → REPLAY (semantik ulangan). Tanpa review yang diselipkan.
+   */
+  async moduleQuiz(userId: string, chapterId: string): Promise<SessionView> {
+    if (typeof chapterId !== 'string')
+      throw new BadRequestException('chapterId wajib diisi');
+    const today = todayWIB();
+
+    const session = await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${userId}))`;
+
+      const chapter = await tx.moduleChapter.findUnique({
+        where: { id: chapterId },
+        include: { module: true },
+      });
+      if (!chapter || chapter.module.status !== 'LIVE')
+        throw new NotFoundException();
+
+      const open = await tx.session.findFirst({
+        where: {
+          userId,
+          date: today,
+          moduleChapterId: chapterId,
+          status: 'IN_PROGRESS',
+        },
+        include: { _count: { select: { items: true, attempts: true } } },
+      });
+      if (open && open._count.items > 0) return open;
+      if (open) {
+        if (open._count.attempts === 0) {
+          await tx.session.delete({ where: { id: open.id } });
+        } else {
+          await tx.session.update({
+            where: { id: open.id },
+            data: { status: 'COMPLETED', completedAt: new Date() },
+          });
+        }
+      }
+
+      const prog = chapter.lessonId
+        ? (await this.completionForLessons(userId, [chapter.lessonId], tx)).get(
+            chapter.lessonId,
+          )
+        : undefined;
+      if (!chapter.lessonId || !prog || prog.liveItemCount === 0) {
+        throw new ConflictException('Kuis bab ini belum tersedia');
+      }
+      const items = await tx.item.findMany({
+        where: { lessonId: chapter.lessonId, status: 'LIVE' },
+        orderBy: { order: 'asc' },
+      });
+
+      const s = await tx.session.create({
+        data: {
+          userId,
+          date: today,
+          kind: prog.done ? 'REPLAY' : 'MODULE',
+          moduleChapterId: chapterId,
+        },
+      });
+      await tx.sessionItem.createMany({
+        data: items.map((i, idx) => ({
+          sessionId: s.id,
+          itemId: i.id,
+          source: 'LESSON' as const,
+          order: idx,
+        })),
+      });
+      return s;
+    });
+    return this.view(session.id, userId);
+  }
+
   async view(sessionId: string, userId: string): Promise<SessionView> {
     const session = await this.prisma.session.findUnique({
       where: { id: sessionId },
@@ -285,6 +361,13 @@ export class SessionService {
         items: {
           include: { item: { include: { lesson: true } } },
           orderBy: { order: 'asc' },
+        },
+        moduleChapter: {
+          select: {
+            order: true,
+            title: true,
+            module: { select: { slug: true } },
+          },
         },
       },
     });
@@ -306,9 +389,11 @@ export class SessionService {
     const lessonTitle =
       session.kind === 'SPEAKING'
         ? 'Latihan Berbicara'
-        : firstLessonSlot
-          ? firstLessonSlot.item.lesson.title
-          : null;
+        : session.moduleChapter
+          ? session.moduleChapter.title
+          : firstLessonSlot
+            ? firstLessonSlot.item.lesson.title
+            : null;
 
     const items: SessionItemView[] = session.items.map((si) => {
       const item = si.item;
@@ -340,6 +425,8 @@ export class SessionService {
       kind: session.kind,
       status: session.status,
       lessonTitle,
+      moduleSlug: session.moduleChapter?.module.slug ?? null,
+      chapterOrder: session.moduleChapter?.order ?? null,
       items,
       progress: { answered: answeredSet.size, total: items.length },
     };

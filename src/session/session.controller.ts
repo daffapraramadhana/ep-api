@@ -44,6 +44,11 @@ export class SessionController {
     return this.session.speaking(user.sub);
   }
 
+  @Post('module')
+  module(@Body() body: { chapterId: string }, @CurrentUser() user: AuthUser) {
+    return this.session.moduleQuiz(user.sub, body?.chapterId);
+  }
+
   @Get(':id')
   get(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     return this.session.view(id, user.sub);
@@ -59,7 +64,9 @@ export class SessionController {
   }
 
   @Post(':id/speak')
-  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }),
+  )
   async speak(
     @Param('id') id: string,
     @UploadedFile() file: Express.Multer.File | undefined,

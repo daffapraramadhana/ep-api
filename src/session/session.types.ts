@@ -18,6 +18,9 @@ export interface SessionView {
   kind: 'DAILY' | 'REPLAY' | 'SPEAKING' | 'MODULE';
   status: 'IN_PROGRESS' | 'COMPLETED';
   lessonTitle: string | null;
+  /** terisi untuk sesi kuis bab (MODULE/REPLAY dari modul) — tombol kembali ke modul */
+  moduleSlug: string | null;
+  chapterOrder: number | null;
   items: SessionItemView[];
   progress: { answered: number; total: number };
 }
