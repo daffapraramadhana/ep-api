@@ -136,6 +136,17 @@ describe('modul untuk user', () => {
         blocks: blocks('B'),
       },
     });
+    // Celah urutan (bab 2..4 pernah dihapus): label harus memakai posisi.
+    await prisma.moduleChapter.create({
+      data: {
+        moduleId: b.id,
+        order: 5,
+        title: 'B5',
+        estMinutes: 5,
+        body: 'B',
+        blocks: blocks('B'),
+      },
+    });
     const d = await prisma.module.create({
       data: {
         slug: slugDraft,
@@ -319,7 +330,20 @@ describe('modul untuk user', () => {
       slug: slugA,
       title: 'MUS A',
       nextOrder: 2,
+      nextPosition: 2,
       nextTitle: 'Dua',
     });
+  });
+
+  it('posisi bab (1-based) dipakai untuk label, bukan order', async () => {
+    const ch = await get(`/modules/${slugB}/chapters/5`).expect(200);
+    expect(ch.body).toMatchObject({
+      order: 5,
+      position: 2,
+      chapterCount: 2,
+      prevOrder: 1,
+    });
+    const d = await get(`/modules/${slugB}`).expect(200);
+    expect(d.body.chapters.map((c: any) => c.position)).toEqual([1, 2]);
   });
 });

@@ -24,6 +24,8 @@ export interface ModulesView {
 export interface ModuleChapterRow {
   id: string;
   order: number;
+  /** nomor tampilan 1-based (order bisa bercelah setelah bab dihapus) */
+  position: number;
   title: string;
   estMinutes: number;
   kind: 'quiz' | 'reading';
@@ -40,6 +42,7 @@ export interface ModuleDetailView extends ModuleCard {
 export interface ChapterView {
   id: string;
   order: number;
+  position: number;
   title: string;
   estMinutes: number;
   blocks: ChapterBlock[];
@@ -55,5 +58,6 @@ export interface ModuleInProgressView {
   slug: string;
   title: string;
   nextOrder: number;
+  nextPosition: number;
   nextTitle: string;
 }

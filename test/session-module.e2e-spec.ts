@@ -19,6 +19,7 @@ describe('POST /session/module (kuis bab)', () => {
   let chDone: string; // lesson sudah tuntas lewat Perjalanan
   let chReading: string; // tanpa lesson
   let chDraftModule: string;
+  let doneLessonId: string;
   let quizItemIds: string[] = [];
   const stamp = Date.now();
 
@@ -74,6 +75,7 @@ describe('POST /session/module (kuis bab)', () => {
     };
     const q = await lesson('Q', 2);
     const d = await lesson('D', 1);
+    doneLessonId = d.l.id;
     quizItemIds = q.ids;
 
     const mod = await prisma.module.create({
@@ -260,5 +262,12 @@ describe('POST /session/module (kuis bab)', () => {
     expect(draft.body.message).toBe('Modul atau bab tidak ditemukan');
     await post('/session/module', { chapterId: 'tidak-ada' }).expect(404);
     await post('/session/module', {}).expect(400);
+  });
+
+  it('link replay lama untuk lesson yang kini kuis bab tetap jalan (REPLAY)', async () => {
+    const res = await post('/session/replay', {
+      lessonId: doneLessonId,
+    }).expect(201);
+    expect(res.body.kind).toBe('REPLAY');
   });
 });

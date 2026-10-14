@@ -61,12 +61,13 @@ export class ModulesService {
     m: LiveModule,
     prog: Map<string, LessonProgress>,
   ): ModuleChapterRow[] {
-    return m.chapters.map((c) => {
+    return m.chapters.map((c, i) => {
       const p = c.lessonId ? prog.get(c.lessonId) : undefined;
       const quiz = !!p && p.liveItemCount > 0;
       return {
         id: c.id,
         order: c.order,
+        position: i + 1,
         title: c.title,
         estMinutes: c.estMinutes,
         kind: quiz ? 'quiz' : 'reading',
@@ -94,19 +95,28 @@ export class ModulesService {
   }
 
   async list(userId: string): Promise<ModulesView> {
+    return (await this.compute(userId)).view;
+  }
+
+  /** Satu kali hitung untuk list() dan inProgressSummary() (Beranda memanggil tiap load). */
+  private async compute(userId: string) {
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
       select: { level: true },
     });
     const modules = await this.loadLive();
     const prog = await this.progressFor(userId, modules);
-    const cards = modules.map((m) => this.card(m, this.rows(m, prog)));
+    const rowsBySlug = new Map(
+      modules.map((m) => [m.slug, this.rows(m, prog)]),
+    );
+    const cards = modules.map((m) => this.card(m, rowsBySlug.get(m.slug)!));
     const inProgressSlug = await this.pickInProgress(userId, modules, cards);
-    return {
+    const view: ModulesView = {
       inProgress: cards.find((c) => c.slug === inProgressSlug) ?? null,
       forYou: cards.filter((c) => c.level === user.level),
       others: cards.filter((c) => c.level !== user.level),
     };
+    return { view, rowsBySlug };
   }
 
   /** Modul berjalan (≥1 bab selesai, belum semua) yang paling baru dikerjakan; seri → urutan modul. */
@@ -183,6 +193,7 @@ export class ModulesService {
     return {
       id: ch.id,
       order: ch.order,
+      position: idx + 1,
       title: ch.title,
       estMinutes: ch.estMinutes,
       blocks: resolveBlocks(
@@ -201,15 +212,18 @@ export class ModulesService {
   async inProgressSummary(
     userId: string,
   ): Promise<ModuleInProgressView | null> {
-    const { inProgress } = await this.list(userId);
-    if (!inProgress) return null;
-    const d = await this.detail(userId, inProgress.slug);
-    const next = d.chapters.find((c) => c.order === d.nextOrder);
+    const { view, rowsBySlug } = await this.compute(userId);
+    const m = view.inProgress;
+    if (!m) return null;
+    const next = rowsBySlug
+      .get(m.slug)!
+      .find((r) => r.kind === 'quiz' && !r.done);
     return next
       ? {
-          slug: d.slug,
-          title: d.title,
+          slug: m.slug,
+          title: m.title,
           nextOrder: next.order,
+          nextPosition: next.position,
           nextTitle: next.title,
         }
       : null;

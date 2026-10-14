@@ -170,8 +170,12 @@ export class SessionService {
     });
     if (!lesson) throw new NotFoundException();
 
-    const completion = await this.lessonCompletion(userId, lesson.level);
-    if (!completion.get(lessonId)) {
+    // Per-id (bukan per-level jalur): lesson yang kini jadi kuis bab modul
+    // tetap bisa diulang dari link lama.
+    const progress = (await this.completionForLessons(userId, [lessonId])).get(
+      lessonId,
+    );
+    if (!progress?.done) {
       throw new BadRequestException('Lesson belum selesai');
     }
 
