@@ -66,6 +66,20 @@ function quizAvailable(l: LessonSummaryRow | null): boolean {
   return !!l && l.status === 'LIVE' && l.items.some((i) => i.status === 'LIVE');
 }
 
+/** Bentrok unique (P2002) dari request bersamaan → 409, bukan 500. */
+async function conflictOnUnique<T>(
+  fn: () => Promise<T>,
+  message: string,
+): Promise<T> {
+  try {
+    return await fn();
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002')
+      throw new ConflictException(message);
+    throw e;
+  }
+}
+
 @Injectable()
 export class AdminModulesService {
   constructor(
@@ -99,9 +113,14 @@ export class AdminModulesService {
   private async parseOrThrow(body: unknown): Promise<StoredBlock[]> {
     const r = await this.parseWithMedia(body);
     if (!r.ok)
-      throw new BadRequestException(
-        r.errors.map((e) => `Baris ${e.line}: ${e.message}`),
-      );
+      // Spec §6: { errors: [{line, message}] }; `message` tetap diisi supaya
+      // klien yang hanya membaca message (api() di web) tetap informatif.
+      throw new BadRequestException({
+        statusCode: 400,
+        error: 'Bad Request',
+        message: r.errors.map((e) => `Baris ${e.line}: ${e.message}`),
+        errors: r.errors,
+      });
     return r.blocks;
   }
 
@@ -345,16 +364,20 @@ export class AdminModulesService {
       where: { moduleId },
       _max: { order: true },
     });
-    const c = await this.prisma.moduleChapter.create({
-      data: {
-        moduleId,
-        order: (max._max.order ?? 0) + 1,
-        title: data.title!,
-        estMinutes: data.estMinutes!,
-        body: data.body!,
-        blocks: data.blocks!,
-      },
-    });
+    const c = await conflictOnUnique(
+      () =>
+        this.prisma.moduleChapter.create({
+          data: {
+            moduleId,
+            order: (max._max.order ?? 0) + 1,
+            title: data.title!,
+            estMinutes: data.estMinutes!,
+            body: data.body!,
+            blocks: data.blocks!,
+          },
+        }),
+      'Bab lain sedang dibuat bersamaan — coba lagi',
+    );
     return this.getChapter(c.id);
   }
 
@@ -386,54 +409,57 @@ export class AdminModulesService {
       throw new BadRequestException('direction harus up atau down');
     const c = await this.prisma.moduleChapter.findUnique({ where: { id } });
     if (!c) throw new NotFoundException();
-    await this.prisma.$transaction(async (tx) => {
-      const neighbor = await tx.moduleChapter.findFirst({
-        where: {
-          moduleId: c.moduleId,
-          order: direction === 'up' ? { lt: c.order } : { gt: c.order },
-        },
-        orderBy: { order: direction === 'up' ? 'desc' : 'asc' },
-      });
-      if (!neighbor) return;
-      // @@unique([moduleId, order]) — tukar lewat nilai sementara.
-      await tx.moduleChapter.update({
-        where: { id: c.id },
-        data: { order: -1 },
-      });
-      await tx.moduleChapter.update({
-        where: { id: neighbor.id },
-        data: { order: c.order },
-      });
-      await tx.moduleChapter.update({
-        where: { id: c.id },
-        data: { order: neighbor.order },
-      });
-    });
+    await conflictOnUnique(
+      () =>
+        this.prisma.$transaction(async (tx) => {
+          const neighbor = await tx.moduleChapter.findFirst({
+            where: {
+              moduleId: c.moduleId,
+              order: direction === 'up' ? { lt: c.order } : { gt: c.order },
+            },
+            orderBy: { order: direction === 'up' ? 'desc' : 'asc' },
+          });
+          if (!neighbor) return;
+          // @@unique([moduleId, order]) — tukar lewat nilai sementara.
+          await tx.moduleChapter.update({
+            where: { id: c.id },
+            data: { order: -1 },
+          });
+          await tx.moduleChapter.update({
+            where: { id: neighbor.id },
+            data: { order: c.order },
+          });
+          await tx.moduleChapter.update({
+            where: { id: c.id },
+            data: { order: neighbor.order },
+          });
+        }),
+      'Urutan bab sedang diubah bersamaan — muat ulang halaman',
+    );
     return this.getModule(c.moduleId);
   }
 
   // ---------- kuis bab ----------
 
   async createQuiz(chapterId: string) {
-    const c = await this.prisma.moduleChapter.findUnique({
-      where: { id: chapterId },
-      include: { module: true },
-    });
-    if (!c) throw new NotFoundException();
-    if (c.lessonId) throw new ConflictException('Bab ini sudah punya kuis');
-    const base = `MOD-${c.module.slug.toUpperCase()}-${c.order}`;
-    let code = base;
-    for (
-      let n = 2;
-      await this.prisma.lesson.findUnique({ where: { code } });
-      n++
-    )
-      code = `${base}-${n}`;
-    const maxOrder = await this.prisma.lesson.aggregate({
-      where: { level: c.module.level },
-      _max: { order: true },
-    });
+    // Satu transaksi + advisory lock per bab: klik ganda tidak boleh membuat
+    // dua lesson (yang kedua akan jadi DRAFT yatim selamanya).
     const lesson = await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${chapterId}))`;
+      const c = await tx.moduleChapter.findUnique({
+        where: { id: chapterId },
+        include: { module: true },
+      });
+      if (!c) throw new NotFoundException();
+      if (c.lessonId) throw new ConflictException('Bab ini sudah punya kuis');
+      const base = `MOD-${c.module.slug.toUpperCase()}-${c.order}`;
+      let code = base;
+      for (let n = 2; await tx.lesson.findUnique({ where: { code } }); n++)
+        code = `${base}-${n}`;
+      const maxOrder = await tx.lesson.aggregate({
+        where: { level: c.module.level },
+        _max: { order: true },
+      });
       const l = await tx.lesson.create({
         data: {
           code,
@@ -477,10 +503,14 @@ export class AdminModulesService {
     if (lesson.moduleChapter && lesson.moduleChapter.id !== chapterId) {
       throw new ConflictException('Lesson ini sudah dipakai bab lain');
     }
-    await this.prisma.moduleChapter.update({
-      where: { id: chapterId },
-      data: { lessonId },
-    });
+    await conflictOnUnique(
+      () =>
+        this.prisma.moduleChapter.update({
+          where: { id: chapterId },
+          data: { lessonId },
+        }),
+      'Lesson ini sudah dipakai bab lain',
+    );
     return this.getChapter(chapterId);
   }
 }

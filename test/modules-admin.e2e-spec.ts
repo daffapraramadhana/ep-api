@@ -109,6 +109,10 @@ describe('admin modul', () => {
     expect(bad.body.message[0]).toBe(
       'Baris 1: Blok ":::tip" belum ditutup dengan ":::"',
     );
+    // Bentuk spec §6: errors terstruktur (+ message tetap untuk klien lama).
+    expect(bad.body.errors).toEqual([
+      { line: 1, message: 'Blok ":::tip" belum ditutup dengan ":::"' },
+    ]);
     expect(await prisma.moduleChapter.count({ where: { moduleId } })).toBe(0);
 
     const a = await auth(req().post(`/admin/modules/${moduleId}/chapters`))
@@ -223,5 +227,38 @@ describe('admin modul', () => {
     await auth(req().patch(`/admin/modules/${moduleId}`))
       .send({ status: 'RETIRED' })
       .expect(400); // DRAFT→RETIRED tak diizinkan
+  });
+
+  it('buat kuis ganda bersamaan → satu 201, satu 409, satu lesson', async () => {
+    const c = await auth(req().post(`/admin/modules/${moduleId}/chapters`))
+      .send({ title: 'Bab race', estMinutes: 5, body: 'x' })
+      .expect(201);
+    const results = await Promise.all([
+      auth(req().post(`/admin/chapters/${c.body.id}/quiz`)),
+      auth(req().post(`/admin/chapters/${c.body.id}/quiz`)),
+    ]);
+    expect(results.map((r) => r.status).sort()).toEqual([201, 409]);
+    expect(
+      await prisma.lesson.count({
+        where: {
+          code: {
+            startsWith: `MOD-MAD-${stamp}-${c.body.order}`.toUpperCase(),
+          },
+        },
+      }),
+    ).toBe(1);
+  });
+
+  it('buat bab bersamaan tidak pernah 500 (bentrok urutan → 409)', async () => {
+    const results = await Promise.all(
+      Array.from({ length: 5 }, (_, i) =>
+        auth(req().post(`/admin/modules/${moduleId}/chapters`)).send({
+          title: `Paralel ${i}`,
+          estMinutes: 5,
+          body: 'x',
+        }),
+      ),
+    );
+    for (const r of results) expect([201, 409]).toContain(r.status);
   });
 });
