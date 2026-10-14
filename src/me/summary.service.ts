@@ -4,6 +4,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AppConfigService } from '../common/config.service';
 import { SessionService } from '../session/session.service';
 import { StreakService } from './streak.service';
+import { ModulesService } from '../modules/modules.service';
+import type { ModuleInProgressView } from '../modules/modules.types';
 import { todayWIB, weekStartWIB } from '../common/wib';
 import { COUNTED_SESSION_KINDS, PATH_LESSON } from '../common/content-scope';
 
@@ -40,6 +42,8 @@ export interface SummaryView {
   /** talking agent aktif (config VOICE_AGENT_ENABLED) — web memakai ini
    *  utk menampilkan/menyembunyikan kartu "Ngobrol dengan AI" tanpa deploy. */
   voiceAgentEnabled: boolean;
+  /** modul yang sedang berjalan — kartu kecil "Lanjutkan modul" di Beranda. */
+  moduleInProgress: ModuleInProgressView | null;
 }
 
 @Injectable()
@@ -49,6 +53,7 @@ export class SummaryService {
     private config: AppConfigService,
     private session: SessionService,
     private streak: StreakService,
+    private modules: ModulesService,
   ) {}
 
   async get(userId: string): Promise<SummaryView> {
@@ -85,7 +90,12 @@ export class SummaryService {
         _sum: { xpAwarded: true },
       }),
       this.prisma.session.count({
-        where: { userId, kind: { in: COUNTED_SESSION_KINDS }, status: 'COMPLETED', date: today },
+        where: {
+          userId,
+          kind: { in: COUNTED_SESSION_KINDS },
+          status: 'COMPLETED',
+          date: today,
+        },
       }),
       this.prisma.reviewQueue.count({
         where: { userId, dueDate: { lte: today }, item: { status: 'LIVE' } },
@@ -125,6 +135,7 @@ export class SummaryService {
       : null;
 
     const openSession = await this.getOpenSession(userId, today);
+    const moduleInProgress = await this.modules.inProgressSummary(userId);
 
     return {
       name: user.name,
@@ -138,6 +149,7 @@ export class SummaryService {
       nextLesson: nextLessonView,
       openSession,
       voiceAgentEnabled: voiceAgentEnabled === 1,
+      moduleInProgress,
     };
   }
 
@@ -148,14 +160,24 @@ export class SummaryService {
    * stay consistent, plus this method's own itemCount for the estimate.
    */
   /** Sesi DAILY hari ini yang IN_PROGRESS (beku) — untuk CTA "LANJUTKAN". */
-  private async getOpenSession(userId: string, today: Date): Promise<OpenSessionView | null> {
+  private async getOpenSession(
+    userId: string,
+    today: Date,
+  ): Promise<OpenSessionView | null> {
     const open = await this.prisma.session.findFirst({
       // Sengaja BUKAN COUNTED_SESSION_KINDS: sesi kuis bab dilanjutkan dari halaman modul.
-      where: { userId, date: today, kind: { in: ['DAILY', 'SPEAKING'] }, status: 'IN_PROGRESS' },
+      where: {
+        userId,
+        date: today,
+        kind: { in: ['DAILY', 'SPEAKING'] },
+        status: 'IN_PROGRESS',
+      },
       include: {
         items: {
           orderBy: { order: 'asc' },
-          include: { item: { select: { lesson: { select: { title: true } } } } },
+          include: {
+            item: { select: { lesson: { select: { title: true } } } },
+          },
         },
         attempts: { where: { correct: true }, select: { itemId: true } },
       },

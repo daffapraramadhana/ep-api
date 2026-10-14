@@ -44,6 +44,15 @@ export function seededShuffle<T>(arr: T[], seedString: string): T[] {
   return result;
 }
 
+export interface LessonProgress {
+  /** item LIVE bila lesson LIVE; 0 bila lesson DRAFT/RETIRED */
+  liveItemCount: number;
+  /** semua item LIVE pernah dijawab benar (definisi lessonCompletionInternal) */
+  done: boolean;
+  /** akurasi percobaan pertama bila done, selain itu null */
+  accuracy: number | null;
+}
+
 type SessionRow = { itemId: string; source: 'LESSON' | 'REVIEW' };
 
 // Any Prisma client shape with the model delegates the helpers below need —
@@ -349,6 +358,56 @@ export class SessionService {
     return (await this.lessonCompletionInternal(userId, level)).map;
   }
 
+  /**
+   * Progres per-lesson berdasarkan id (tidak difilter level/PATH_LESSON) —
+   * dipakai kuis bab modul. Definisi "done" identik lessonCompletionInternal.
+   */
+  async completionForLessons(
+    userId: string,
+    lessonIds: string[],
+    db: Db = this.prisma,
+  ): Promise<Map<string, LessonProgress>> {
+    const map = new Map<string, LessonProgress>();
+    if (!lessonIds.length) return map;
+    const lessons = await db.lesson.findMany({
+      where: { id: { in: lessonIds } },
+      select: {
+        id: true,
+        status: true,
+        items: { where: { status: 'LIVE' }, select: { id: true } },
+      },
+    });
+    const itemIds = lessons
+      .filter((l) => l.status === 'LIVE')
+      .flatMap((l) => l.items.map((i) => i.id));
+    const attempts = itemIds.length
+      ? await db.attempt.findMany({
+          where: { userId, itemId: { in: itemIds }, correct: true },
+          select: { itemId: true, firstTry: true },
+        })
+      : [];
+    const correct = new Set(attempts.map((a) => a.itemId));
+    const firstTryCorrect = new Set(
+      attempts.filter((a) => a.firstTry).map((a) => a.itemId),
+    );
+    for (const l of lessons) {
+      const items = l.status === 'LIVE' ? l.items : [];
+      const done = items.length > 0 && items.every((i) => correct.has(i.id));
+      map.set(l.id, {
+        liveItemCount: items.length,
+        done,
+        accuracy: done
+          ? Math.round(
+              (items.filter((i) => firstTryCorrect.has(i.id)).length /
+                items.length) *
+                100,
+            )
+          : null,
+      });
+    }
+    return map;
+  }
+
   private async lessonCompletionInternal(
     userId: string,
     level: Level,
@@ -394,7 +453,10 @@ export class SessionService {
     // picked forever, assembling an empty session that permanently locks
     // the user out of their daily session. Skip it and let the next
     // (non-empty) lesson — or the reinforcement pool — take over.
-    return lessons.filter((l) => l.items.length > 0).find((l) => !map.get(l.id)) ?? null;
+    return (
+      lessons.filter((l) => l.items.length > 0).find((l) => !map.get(l.id)) ??
+      null
+    );
   }
 
   /**
