@@ -13,10 +13,15 @@ export const COUNTED_SESSION_KINDS: SessionKind[] = [
 ];
 
 /**
- * Lesson "jalur harian" = lesson yang TIDAK ditautkan ke bab modul. Dipakai
- * di semua query lesson untuk Perjalanan, perakitan sesi harian/berbicara,
- * penguatan, dan hitungan "materi selesai".
+ * Lesson "jalur harian" = lesson yang TIDAK menjadi kuis bab modul LIVE.
+ * Lesson yang ditautkan ke modul DRAFT/RETIRED tetap di jalur — menyusun
+ * modul tidak boleh diam-diam menarik konten dari Perjalanan karyawan.
+ * Dipakai di semua query lesson untuk Perjalanan, perakitan sesi
+ * harian/berbicara, penguatan, dan hitungan "materi selesai".
  */
 export const PATH_LESSON: Prisma.LessonWhereInput = {
-  moduleChapter: { is: null },
+  OR: [
+    { moduleChapter: { is: null } },
+    { moduleChapter: { is: { module: { status: { not: 'LIVE' } } } } },
+  ],
 };

@@ -25,6 +25,8 @@ describe('cakupan modul (PATH_LESSON & COUNTED_SESSION_KINDS)', () => {
   let moduleLessonId: string;
   let pathItemIds: string[] = [];
   let moduleItemIds: string[] = [];
+  let draftLinkedLessonId: string;
+  let token3: string;
   const stamp = Date.now();
 
   const get = (p: string, t: string) =>
@@ -87,6 +89,10 @@ describe('cakupan modul (PATH_LESSON & COUNTED_SESSION_KINDS)', () => {
     moduleItemIds = modL.ids;
     pathLessonId = pathL.l.id;
     pathItemIds = pathL.ids;
+    // Lesson yang ditautkan ke modul DRAFT tetap di jalur harian (keputusan
+    // review: baru keluar dari Perjalanan setelah modulnya LIVE).
+    const draftL = await mk('DRAFTL', -998);
+    draftLinkedLessonId = draftL.l.id;
 
     const mod = await prisma.module.create({
       data: {
@@ -108,6 +114,27 @@ describe('cakupan modul (PATH_LESSON & COUNTED_SESSION_KINDS)', () => {
         body: 'x',
         blocks: [],
         lessonId: moduleLessonId,
+      },
+    });
+    const draftMod = await prisma.module.create({
+      data: {
+        slug: `msc-d-${stamp}`,
+        title: 'MSC Draft',
+        summary: 's',
+        level: 'MAHIR',
+        cefr: 'C1',
+        order: 2,
+      },
+    });
+    await prisma.moduleChapter.create({
+      data: {
+        moduleId: draftMod.id,
+        order: 1,
+        title: 'Bab draft',
+        estMinutes: 5,
+        body: 'x',
+        blocks: [],
+        lessonId: draftLinkedLessonId,
       },
     });
 
@@ -134,6 +161,43 @@ describe('cakupan modul (PATH_LESSON & COUNTED_SESSION_KINDS)', () => {
       },
     });
     userId2 = u2.id;
+    // User 3: semua lesson jalur tuntas → sesi harian jatuh ke penguatan.
+    // Item lesson bab LIVE pernah dijawab SALAH (prioritas tertinggi penguatan
+    // seandainya tidak dikecualikan).
+    const u3 = await prisma.user.create({
+      data: {
+        name: 'MSC3',
+        email: `msc-c-${stamp}@ex.com`,
+        role: 'USER',
+        level: 'MAHIR',
+        passwordHash,
+        inviteStatus: 'ACCEPTED',
+      },
+    });
+    const past = await prisma.session.create({
+      data: {
+        userId: u3.id,
+        date: new Date('2026-10-01'),
+        kind: 'DAILY',
+        status: 'COMPLETED',
+      },
+    });
+    for (const [itemId, correct] of [
+      ...pathItemIds.map((id) => [id, true] as const),
+      ...draftL.ids.map((id) => [id, true] as const),
+      ...moduleItemIds.map((id) => [id, false] as const),
+    ]) {
+      await prisma.attempt.create({
+        data: {
+          userId: u3.id,
+          itemId,
+          sessionId: past.id,
+          answer: 'x',
+          correct,
+          firstTry: true,
+        },
+      });
+    }
     const login = async (email: string) =>
       (
         await request(app.getHttpServer())
@@ -143,6 +207,7 @@ describe('cakupan modul (PATH_LESSON & COUNTED_SESSION_KINDS)', () => {
       ).body.accessToken as string;
     token = await login(u.email);
     token2 = await login(u2.email);
+    token3 = await login(u3.email);
   });
 
   afterAll(async () => {
@@ -204,5 +269,21 @@ describe('cakupan modul (PATH_LESSON & COUNTED_SESSION_KINDS)', () => {
     const res = await get('/me/summary', token2).expect(200);
     expect(res.body.sessionsCompletedToday).toBe(1);
     expect(res.body.streak).toBeGreaterThanOrEqual(1);
+  });
+
+  it('lesson yang ditautkan ke modul DRAFT tetap di /journey', async () => {
+    const res = await get('/journey', token).expect(200);
+    const ids = res.body.topics.flatMap((t: any) =>
+      t.lessons.map((l: any) => l.id),
+    );
+    expect(ids).toContain(draftLinkedLessonId);
+  });
+
+  it('penguatan tidak memuat item lesson bab modul LIVE', async () => {
+    const res = await post('/session/today', token3).expect(201);
+    const ids = res.body.items.map((i: any) => i.itemId);
+    expect(res.body.items.every((i: any) => i.source === 'REVIEW')).toBe(true);
+    expect(ids).toEqual(expect.arrayContaining(pathItemIds));
+    expect(ids.some((id: string) => moduleItemIds.includes(id))).toBe(false);
   });
 });
