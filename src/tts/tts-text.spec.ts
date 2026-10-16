@@ -141,3 +141,32 @@ describe('chunkText', () => {
     }
   });
 });
+
+describe('parseTtsScript — suara mengikuti sapaan', () => {
+  it('Mr. bicara duluan → tetap suara laki-laki; Rina → suara perempuan', () => {
+    expect(
+      parseTtsScript('Mr. Davis: Is the bus far?\nRina: Not at all.'),
+    ).toEqual({
+      segments: [
+        { voice: 'am_michael', text: 'Is the bus far?' },
+        { voice: 'af_heart', text: 'Not at all.' },
+      ],
+    });
+  });
+
+  it('Mrs./Ms./Madam → perempuan, Sir → laki-laki', () => {
+    const r = parseTtsScript('Sir: Hello.\nMrs. Clark: Hi there.');
+    expect('segments' in r && r.segments.map((s) => s.voice)).toEqual([
+      'am_michael',
+      'af_heart',
+    ]);
+  });
+
+  it('dua pembicara bergender sama tetap dibedakan suaranya', () => {
+    const r = parseTtsScript('Mr. Lee: Hello.\nMr. Tanaka: Good morning.');
+    expect('segments' in r && r.segments.map((s) => s.voice)).toEqual([
+      'am_michael',
+      'af_heart',
+    ]);
+  });
+});

@@ -23,6 +23,11 @@
     "seed:complaints": "ts-node prisma/seed-complaints.ts",
     "seed:module-complaints": "ts-node prisma/seed-module-complaints.ts",
     "seed:eftl-1": "ts-node prisma/seed-eftl-1.ts",
+    "seed:eftl-2": "ts-node prisma/seed-eftl-2.ts",
+    "seed:eftl-3": "ts-node prisma/seed-eftl-3.ts",
+    "seed:eftl-4": "ts-node prisma/seed-eftl-4.ts",
+    "seed:eftl-5": "ts-node prisma/seed-eftl-5.ts",
+    "validate:module": "ts-node prisma/validate-module.ts",
     "tts:backfill": "ts-node src/tts/cli/backfill.ts",
     "tts:adopt-seed-audio": "ts-node src/tts/cli/adopt-seed-audio.ts",
     "audio:push:minio": "ts-node scripts/upload-audio-minio.ts"

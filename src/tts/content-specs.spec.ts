@@ -100,4 +100,30 @@ describe('chapterSpecs', () => {
     ]);
     expect(specs).toEqual([{ segments: [] }]);
   });
+
+  it('dialog bab: suara mengikuti sapaan, bukan sisi', () => {
+    const specs = chapterSpecs([
+      {
+        type: 'dialog',
+        lines: [
+          {
+            speaker: 'Kamu',
+            role: 'Tour Leader',
+            side: 'left',
+            text: 'Good evening!',
+          },
+          {
+            speaker: 'Mrs. Smith',
+            role: 'Tamu',
+            side: 'right',
+            text: 'Good evening!',
+          },
+        ],
+      },
+    ]);
+    expect(specs.map((s) => s.segments[0].voice)).toEqual([
+      'am_michael',
+      'af_heart',
+    ]);
+  });
 });

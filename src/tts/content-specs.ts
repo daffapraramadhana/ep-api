@@ -1,11 +1,10 @@
 // apps/api/src/tts/content-specs.ts
 import type { StoredBlock } from '../modules/chapter-parser';
 import {
+  assignVoices,
   parseTtsScript,
   speakableText,
-  VOICE_LEFT,
   VOICE_NARRATOR,
-  VOICE_RIGHT,
 } from './tts-text';
 import type { TtsSpec } from './tts.service';
 
@@ -51,9 +50,14 @@ export function chapterSpecs(blocks: StoredBlock[]): TtsSpec[] {
   for (const b of blocks) {
     if (b.type === 'phrases')
       for (const p of b.items) specs.push(one(VOICE_NARRATOR, p.en));
-    if (b.type === 'dialog')
+    if (b.type === 'dialog') {
+      // sama dengan ttsText: sapaan (Mr./Mrs./…) menentukan suara, bukan sisi
+      const voices = assignVoices([
+        ...new Set(b.lines.map((l) => l.speaker.trim().toLowerCase())),
+      ]);
       for (const l of b.lines)
-        specs.push(one(l.side === 'left' ? VOICE_LEFT : VOICE_RIGHT, l.text));
+        specs.push(one(voices.get(l.speaker.trim().toLowerCase())!, l.text));
+    }
   }
   return specs;
 }

@@ -39,6 +39,34 @@ export function speakableText(s: string): string {
   return /[\p{L}\p{N}]/u.test(t) ? t : '';
 }
 
+/** Sapaan menentukan suara: Mr./Sir → laki-laki, Mrs./Ms./Miss/Madam → perempuan. */
+function voiceFromTitle(speaker: string): string | null {
+  if (/^(mr|sir)\b/.test(speaker)) return VOICE_RIGHT;
+  if (/^(mrs|ms|miss|madam)\b/.test(speaker)) return VOICE_LEFT;
+  return null;
+}
+
+/**
+ * Pembicara bersapaan dapat suara sesuai gendernya (bila belum dipakai);
+ * sisanya mengisi suara yang tersisa sesuai urutan — dua pembicara selalu
+ * terdengar berbeda.
+ */
+export function assignVoices(speakers: string[]): Map<string, string> {
+  const voices = new Map<string, string>();
+  const used = () => new Set(voices.values());
+  for (const s of speakers) {
+    const v = voiceFromTitle(s);
+    if (v && !used().has(v)) voices.set(s, v);
+  }
+  for (const s of speakers)
+    if (!voices.has(s))
+      voices.set(
+        s,
+        [VOICE_LEFT, VOICE_RIGHT].find((v) => !used().has(v))!,
+      );
+  return voices;
+}
+
 export function parseTtsScript(
   text: string,
 ): { segments: TtsSegment[] } | { error: string } {
@@ -49,19 +77,22 @@ export function parseTtsScript(
   const matches = lines.map(speakerLine);
   // Satu baris "Catatan: ..." tetap narasi — dialog butuh ≥2 baris.
   if (lines.length >= 2 && matches.every(Boolean)) {
-    const voices = new Map<string, string>();
-    const segments: TtsSegment[] = [];
-    for (const m of matches as RegExpExecArray[]) {
-      const speaker = m[1].trim().toLowerCase();
-      if (!voices.has(speaker)) {
-        if (voices.size >= 2)
-          return { error: 'Teks audio maksimal 2 pembicara' };
-        voices.set(speaker, voices.size === 0 ? VOICE_LEFT : VOICE_RIGHT);
-      }
-      const spoken = speakableText(m[3]);
-      if (spoken) segments.push({ voice: voices.get(speaker)!, text: spoken });
-    }
-    return { segments };
+    const turns = (matches as RegExpExecArray[]).map((m) => ({
+      speaker: m[1].trim(),
+      text: speakableText(m[3]),
+    }));
+    const speakers = [...new Set(turns.map((t) => t.speaker.toLowerCase()))];
+    if (speakers.length > 2)
+      return { error: 'Teks audio maksimal 2 pembicara' };
+    const voices = assignVoices(speakers);
+    return {
+      segments: turns
+        .filter((t) => t.text)
+        .map((t) => ({
+          voice: voices.get(t.speaker.toLowerCase())!,
+          text: t.text,
+        })),
+    };
   }
   const spoken = speakableText(lines.join(' '));
   return { segments: spoken ? [{ voice: VOICE_NARRATOR, text: spoken }] : [] };

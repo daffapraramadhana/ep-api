@@ -9,6 +9,7 @@ import {
   SkillTag,
 } from '@prisma/client';
 import { parseChapter } from '../src/modules/chapter-parser';
+import { parseTtsScript, TTS_MAX_CHARS } from '../src/tts/tts-text';
 
 /**
  * Runner bersama untuk seeder "satu sumber = satu modul" (mis. PDF EFTL 1..5).
@@ -59,7 +60,8 @@ export type KitModule = {
   chapters: KitChapter[];
 };
 
-function validate(def: KitModule) {
+/** Semua kesalahan definisi (kosong = valid) — dipakai seedModule & validate-module. */
+export function validateModule(def: KitModule): string[] {
   const errors: string[] = [];
   const codes = new Set<string>();
   for (const c of def.chapters) {
@@ -87,8 +89,26 @@ function validate(def: KitModule) {
         errors.push(`${at}: minimal 2 kata`);
       if (it.type === 'SUSUN_KALIMAT' && /[.,!?]/.test(it.answerKey))
         errors.push(`${at}: kunci susun tanpa tanda baca (jadi chip)`);
+      if (
+        it.type === 'SUSUN_KALIMAT' &&
+        it.answerKey.trim().split(/\s+/).length < 3
+      )
+        errors.push(`${at}: kunci susun minimal 3 kata (aturan importer)`);
+      if (it.tts !== undefined) {
+        if (it.tts.length > TTS_MAX_CHARS)
+          errors.push(`${at}: tts maksimal ${TTS_MAX_CHARS} karakter`);
+        const script = parseTtsScript(it.tts);
+        if ('error' in script) errors.push(`${at}: tts ${script.error}`);
+        else if (!script.segments.length)
+          errors.push(`${at}: tts tidak berisi teks yang bisa diucapkan`);
+      }
     });
   }
+  return errors;
+}
+
+function validate(def: KitModule) {
+  const errors = validateModule(def);
   if (errors.length)
     throw new Error(
       `Definisi "${def.title}" tidak valid:\n- ${errors.join('\n- ')}`,
