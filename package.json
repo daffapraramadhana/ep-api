@@ -23,6 +23,8 @@
     "seed:complaints": "ts-node prisma/seed-complaints.ts",
     "seed:module-complaints": "ts-node prisma/seed-module-complaints.ts",
     "seed:eftl-1": "ts-node prisma/seed-eftl-1.ts",
+    "tts:backfill": "ts-node src/tts/cli/backfill.ts",
+    "tts:adopt-seed-audio": "ts-node src/tts/cli/adopt-seed-audio.ts",
     "audio:push:minio": "ts-node scripts/upload-audio-minio.ts"
   },
   "dependencies": {

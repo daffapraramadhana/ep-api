@@ -1,6 +1,5 @@
 import 'dotenv/config';
 import { PrismaClient, ItemType, Cefr, SkillTag } from '@prisma/client';
-import { hasMacTts, makeAudio, makeAudioStore } from './seed-audio';
 
 /**
  * Seed KONTEN — topik "Complaints at Work" (MENENGAH, CMP-201..211).
@@ -20,7 +19,7 @@ import { hasMacTts, makeAudio, makeAudioStore } from './seed-audio';
  * soal yang sudah ter-seed; perbaiki lewat admin. Soal baru (order baru)
  * di lesson yang sudah ada tetap ditambahkan.
  *
- * Audio listening (CMP-210): TTS macOS, sama dengan seed-demo.
+ * Audio listening (CMP-210): field `tts` → Item.ttsText (audio Kokoro dibuat server).
  */
 
 const prisma = new PrismaClient();
@@ -36,7 +35,7 @@ type Item = {
   acceptedAnswers?: string[];
   explanation: string;
   passage?: string;
-  /** teks TTS — bila diisi, file audio dibuat & item.mediaFile menunjuk ke sana */
+  /** teks yang dibacakan suara AI → Item.ttsText */
   tts?: string;
 };
 
@@ -73,7 +72,7 @@ Yours sincerely,
 Hadi Santoso
 Customer Service, Mitra Kertas`;
 
-const LESSONS: Lesson[] = [
+export const LESSONS: Lesson[] = [
   {
     code: 'CMP-201',
     title: 'Kosakata Keluhan',
@@ -83,23 +82,36 @@ const LESSONS: Lesson[] = [
       {
         type: 'PILIHAN_GANDA',
         prompt: 'What does "refund" mean?',
-        options: ['Pengembalian dana', 'Potongan harga', 'Biaya tambahan', 'Tagihan'],
+        options: [
+          'Pengembalian dana',
+          'Potongan harga',
+          'Biaya tambahan',
+          'Tagihan',
+        ],
         answerKey: 'A',
-        explanation: '"Refund" = pengembalian dana. "I would like a full refund."',
+        explanation:
+          '"Refund" = pengembalian dana. "I would like a full refund."',
       },
       {
         type: 'PILIHAN_GANDA',
         prompt: 'What does "inconvenience" mean?',
-        options: ['Keuntungan', 'Ketidaknyamanan', 'Keterlambatan', 'Kerusakan'],
+        options: [
+          'Keuntungan',
+          'Ketidaknyamanan',
+          'Keterlambatan',
+          'Kerusakan',
+        ],
         answerKey: 'B',
-        explanation: '"Inconvenience" = ketidaknyamanan. Sering dipakai: "I apologize for the inconvenience."',
+        explanation:
+          '"Inconvenience" = ketidaknyamanan. Sering dipakai: "I apologize for the inconvenience."',
       },
       {
         type: 'ISIAN',
         prompt: 'The package arrived two weeks late. The ___ was very slow.',
         answerKey: 'delivery',
         acceptedAnswers: ['delivery', 'shipping', 'shipment'],
-        explanation: '"Delivery" = pengiriman. "Late delivery" = pengiriman terlambat.',
+        explanation:
+          '"Delivery" = pengiriman. "Late delivery" = pengiriman terlambat.',
       },
       {
         type: 'PILIHAN_GANDA',
@@ -111,7 +123,8 @@ const LESSONS: Lesson[] = [
           'The traffic made me late.',
         ],
         answerKey: 'C',
-        explanation: 'Keluhan mekanikal = alat/produk tidak berfungsi, seperti printer yang mati.',
+        explanation:
+          'Keluhan mekanikal = alat/produk tidak berfungsi, seperti printer yang mati.',
       },
       {
         type: 'ISIAN',
@@ -125,28 +138,38 @@ const LESSONS: Lesson[] = [
         prompt: 'What does "issue" mean in "We are checking the issue now"?',
         options: ['Terbitan', 'Surat', 'Masalah', 'Berita'],
         answerKey: 'C',
-        explanation: 'Dalam konteks keluhan, "issue" = masalah — lebih formal daripada "problem".',
+        explanation:
+          'Dalam konteks keluhan, "issue" = masalah — lebih formal daripada "problem".',
       },
       {
         type: 'ISIAN',
-        prompt: 'Please write the ticket ___ in your email so we can track your case.',
+        prompt:
+          'Please write the ticket ___ in your email so we can track your case.',
         answerKey: 'number',
         acceptedAnswers: ['number', 'ID'],
-        explanation: '"Ticket number" / "ticket ID" = nomor tiket untuk melacak keluhan.',
+        explanation:
+          '"Ticket number" / "ticket ID" = nomor tiket untuk melacak keluhan.',
       },
       {
         type: 'PILIHAN_GANDA',
         prompt: 'What does "follow up" mean?',
-        options: ['Membatalkan', 'Menindaklanjuti', 'Menolak', 'Mengikuti dari belakang'],
+        options: [
+          'Membatalkan',
+          'Menindaklanjuti',
+          'Menolak',
+          'Mengikuti dari belakang',
+        ],
         answerKey: 'B',
-        explanation: '"Follow up" = menindaklanjuti. "I will follow up on your complaint."',
+        explanation:
+          '"Follow up" = menindaklanjuti. "I will follow up on your complaint."',
       },
       {
         type: 'PILIHAN_GANDA',
         prompt: 'Which one is a WRITTEN channel for a complaint?',
         options: ['Phone call', 'Video call', 'Face-to-face meeting', 'Email'],
         answerKey: 'D',
-        explanation: 'Media tertulis: email, live chat, media sosial. Media lisan: telepon, tatap muka.',
+        explanation:
+          'Media tertulis: email, live chat, media sosial. Media lisan: telepon, tatap muka.',
       },
     ],
   },
@@ -166,14 +189,16 @@ const LESSONS: Lesson[] = [
           'Give me my money back now.',
         ],
         answerKey: 'B',
-        explanation: '"I\'d like to make a complaint about…" = cara sopan membuka keluhan.',
+        explanation:
+          '"I\'d like to make a complaint about…" = cara sopan membuka keluhan.',
       },
       {
         type: 'ISIAN',
         prompt: 'Excuse me, but there ___ to be a problem with my access card.',
         answerKey: 'seems',
         acceptedAnswers: ['seems', 'appears'],
-        explanation: '"There seems/appears to be a problem…" = sepertinya ada masalah. Halus, tidak menuduh.',
+        explanation:
+          '"There seems/appears to be a problem…" = sepertinya ada masalah. Halus, tidak menuduh.',
       },
       {
         type: 'SUSUN_KALIMAT',
@@ -191,13 +216,15 @@ const LESSONS: Lesson[] = [
           'Would you please replace the broken chair?',
         ],
         answerKey: 'D',
-        explanation: '"Would you please…?" = permintaan sopan untuk penyelesaian.',
+        explanation:
+          '"Would you please…?" = permintaan sopan untuk penyelesaian.',
       },
       {
         type: 'ISIAN',
         prompt: 'I was ___ the invoice last week, but it has not arrived yet.',
         answerKey: 'expecting',
-        explanation: '"I was expecting (something), but…" = saya mengharapkan…, namun…',
+        explanation:
+          '"I was expecting (something), but…" = saya mengharapkan…, namun…',
       },
       {
         type: 'PILIHAN_GANDA',
@@ -209,20 +236,23 @@ const LESSONS: Lesson[] = [
           'Saya ingin membatalkan pesanan',
         ],
         answerKey: 'A',
-        explanation: '"I would like…" = menyampaikan harapan penyelesaian. "Full refund" = uang kembali penuh.',
+        explanation:
+          '"I would like…" = menyampaikan harapan penyelesaian. "Full refund" = uang kembali penuh.',
       },
       {
         type: 'SUSUN_KALIMAT',
         prompt: SUSUN,
         answerKey: 'Do you think you could check it today',
-        explanation: '"Do you think you could…?" = Apakah menurut Anda, Anda bisa…? Permintaan yang halus.',
+        explanation:
+          '"Do you think you could…?" = Apakah menurut Anda, Anda bisa…? Permintaan yang halus.',
       },
       {
         type: 'ISIAN',
         prompt: 'I would like you to ___ this matter. (menyelidiki)',
         answerKey: 'investigate',
         acceptedAnswers: ['investigate', 'look into', 'check'],
-        explanation: '"I would like you to investigate this matter." = Saya berharap Anda menyelidiki hal ini.',
+        explanation:
+          '"I would like you to investigate this matter." = Saya berharap Anda menyelidiki hal ini.',
       },
       {
         type: 'PILIHAN_GANDA',
@@ -234,7 +264,8 @@ const LESSONS: Lesson[] = [
           "I'm afraid I'd like to complain about the noise.",
         ],
         answerKey: 'C',
-        explanation: 'Keluhan tetap harus sopan. "This is your fault" menyalahkan langsung.',
+        explanation:
+          'Keluhan tetap harus sopan. "This is your fault" menyalahkan langsung.',
       },
     ],
   },
@@ -258,7 +289,8 @@ const LESSONS: Lesson[] = [
       },
       {
         type: 'ISIAN',
-        prompt: 'Please ___ your account details before you continue. (check → formal)',
+        prompt:
+          'Please ___ your account details before you continue. (check → formal)',
         answerKey: 'verify',
         explanation: '"Check" (nonformal) → "verify" (formal).',
       },
@@ -285,7 +317,8 @@ const LESSONS: Lesson[] = [
           'I am going to check your account.',
         ],
         answerKey: 'D',
-        explanation: 'Hindari slang ("gonna", "lemme") dan singkatan dalam komunikasi resmi.',
+        explanation:
+          'Hindari slang ("gonna", "lemme") dan singkatan dalam komunikasi resmi.',
       },
       {
         type: 'PILIHAN_GANDA',
@@ -297,14 +330,16 @@ const LESSONS: Lesson[] = [
           'My bad.',
         ],
         answerKey: 'A',
-        explanation: '"I apologize" lebih formal dari "I\'m sorry"; "issue" lebih formal dari "problem".',
+        explanation:
+          '"I apologize" lebih formal dari "I\'m sorry"; "issue" lebih formal dari "problem".',
       },
       {
         type: 'ISIAN',
         prompt: 'The meeting was ___ until next Monday. (put off → formal)',
         answerKey: 'postponed',
         acceptedAnswers: ['postponed', 'delayed'],
-        explanation: '"Put off" (nonformal) → "postpone" (formal). Bentuk pasif: was postponed.',
+        explanation:
+          '"Put off" (nonformal) → "postpone" (formal). Bentuk pasif: was postponed.',
       },
       {
         type: 'ISIAN',
@@ -325,17 +360,20 @@ const LESSONS: Lesson[] = [
         type: 'SUSUN_KALIMAT',
         prompt: SUSUN,
         answerKey: 'Could you tell me exactly what happened',
-        explanation: 'Pertanyaan tidak langsung: "Could you tell me + what happened" (tanpa "did").',
+        explanation:
+          'Pertanyaan tidak langsung: "Could you tell me + what happened" (tanpa "did").',
       },
       {
         type: 'SUSUN_KALIMAT',
         prompt: SUSUN,
         answerKey: 'Could you tell me a little more about it',
-        explanation: '"Could you tell me a little more about it?" = minta detail tambahan (probing).',
+        explanation:
+          '"Could you tell me a little more about it?" = minta detail tambahan (probing).',
       },
       {
         type: 'PILIHAN_GANDA',
-        prompt: 'A colleague says, "The system is broken." You need more details. What do you ask?',
+        prompt:
+          'A colleague says, "The system is broken." You need more details. What do you ask?',
         options: [
           'Why did you break it?',
           'Could you clarify what you mean by "broken"?',
@@ -343,7 +381,8 @@ const LESSONS: Lesson[] = [
           'Broken how, huh?',
         ],
         answerKey: 'B',
-        explanation: '"Could you clarify what you mean by…?" = minta penjelasan dengan sopan.',
+        explanation:
+          '"Could you clarify what you mean by…?" = minta penjelasan dengan sopan.',
       },
       {
         type: 'ISIAN',
@@ -362,7 +401,8 @@ const LESSONS: Lesson[] = [
           'Could you tell me what happened did?',
         ],
         answerKey: 'C',
-        explanation: 'Setelah "Could you tell me…", susunannya seperti kalimat biasa: "what happened" — tanpa "did".',
+        explanation:
+          'Setelah "Could you tell me…", susunannya seperti kalimat biasa: "what happened" — tanpa "did".',
       },
       {
         type: 'PILIHAN_GANDA',
@@ -374,13 +414,15 @@ const LESSONS: Lesson[] = [
           'when does the problem started',
         ],
         answerKey: 'B',
-        explanation: 'Pertanyaan tidak langsung: kata tanya + subjek + kata kerja → "when the problem started".',
+        explanation:
+          'Pertanyaan tidak langsung: kata tanya + subjek + kata kerja → "when the problem started".',
       },
       {
         type: 'SUSUN_KALIMAT',
         prompt: SUSUN,
         answerKey: 'I would like to summarize the situation',
-        explanation: 'Merangkum keluhan memastikan kita memahaminya dengan benar.',
+        explanation:
+          'Merangkum keluhan memastikan kita memahaminya dengan benar.',
       },
       {
         type: 'ISIAN',
@@ -393,7 +435,8 @@ const LESSONS: Lesson[] = [
         type: 'SUSUN_KALIMAT',
         prompt: SUSUN,
         answerKey: 'I will make a few notes as you speak',
-        explanation: '"I will make a few notes as you speak." = Saya akan mencatat selagi Anda berbicara.',
+        explanation:
+          '"I will make a few notes as you speak." = Saya akan mencatat selagi Anda berbicara.',
       },
     ],
   },
@@ -405,7 +448,8 @@ const LESSONS: Lesson[] = [
     items: [
       {
         type: 'PILIHAN_GANDA',
-        prompt: 'A client says their order arrived damaged. What is the best response?',
+        prompt:
+          'A client says their order arrived damaged. What is the best response?',
         options: [
           "That is the courier's fault, not ours.",
           'You should have checked it first.',
@@ -413,7 +457,8 @@ const LESSONS: Lesson[] = [
           'I really apologize for the inconvenience.',
         ],
         answerKey: 'D',
-        explanation: 'Respons positif: minta maaf, tidak menyalahkan pihak lain atau pelanggan.',
+        explanation:
+          'Respons positif: minta maaf, tidak menyalahkan pihak lain atau pelanggan.',
       },
       {
         type: 'ISIAN',
@@ -431,7 +476,8 @@ const LESSONS: Lesson[] = [
           'Everyone has this problem.',
         ],
         answerKey: 'A',
-        explanation: 'Empati = menunjukkan kita memahami perasaan lawan bicara.',
+        explanation:
+          'Empati = menunjukkan kita memahami perasaan lawan bicara.',
       },
       {
         type: 'ISIAN',
@@ -442,7 +488,8 @@ const LESSONS: Lesson[] = [
       },
       {
         type: 'PILIHAN_GANDA',
-        prompt: 'Kenapa respons "It is your own fault for not being careful." dianggap buruk?',
+        prompt:
+          'Kenapa respons "It is your own fault for not being careful." dianggap buruk?',
         options: [
           'Terlalu formal',
           'Menyalahkan lawan bicara dan menolak bertanggung jawab',
@@ -450,13 +497,15 @@ const LESSONS: Lesson[] = [
           'Tata bahasanya salah',
         ],
         answerKey: 'B',
-        explanation: 'Respons negatif menyalahkan pelanggan/pihak lain — keluhan jadi makin buruk.',
+        explanation:
+          'Respons negatif menyalahkan pelanggan/pihak lain — keluhan jadi makin buruk.',
       },
       {
         type: 'SUSUN_KALIMAT',
         prompt: SUSUN,
         answerKey: 'I am really sorry to hear that',
-        explanation: '"I am really sorry to hear that." = Saya turut menyesal mendengarnya.',
+        explanation:
+          '"I am really sorry to hear that." = Saya turut menyesal mendengarnya.',
       },
       {
         type: 'ISIAN',
@@ -475,13 +524,15 @@ const LESSONS: Lesson[] = [
           'Saya akan pergi dengan cara yang sama',
         ],
         answerKey: 'C',
-        explanation: 'Ungkapan empati: menempatkan diri di posisi lawan bicara.',
+        explanation:
+          'Ungkapan empati: menempatkan diri di posisi lawan bicara.',
       },
       {
         type: 'SUSUN_KALIMAT',
         prompt: SUSUN,
         answerKey: 'I appreciate your patience in this matter',
-        explanation: '"I appreciate your patience in this matter." = Saya menghargai kesabaran Anda.',
+        explanation:
+          '"I appreciate your patience in this matter." = Saya menghargai kesabaran Anda.',
       },
     ],
   },
@@ -495,7 +546,8 @@ const LESSONS: Lesson[] = [
         type: 'ISIAN',
         prompt: 'Thanks for bringing that to our ___.',
         answerKey: 'attention',
-        explanation: '"Thanks for bringing that to our attention." = Terima kasih sudah memberi tahu kami.',
+        explanation:
+          '"Thanks for bringing that to our attention." = Terima kasih sudah memberi tahu kami.',
       },
       {
         type: 'PILIHAN_GANDA',
@@ -507,13 +559,15 @@ const LESSONS: Lesson[] = [
           'We are busy now.',
         ],
         answerKey: 'C',
-        explanation: 'Awali dengan terima kasih — keluhan adalah masukan berharga.',
+        explanation:
+          'Awali dengan terima kasih — keluhan adalah masukan berharga.',
       },
       {
         type: 'SUSUN_KALIMAT',
         prompt: SUSUN,
         answerKey: 'Thank you for sharing your concern',
-        explanation: '"Concern" = kekhawatiran/keluhan. Terima kasih sudah menyampaikannya.',
+        explanation:
+          '"Concern" = kekhawatiran/keluhan. Terima kasih sudah menyampaikannya.',
       },
       {
         type: 'ISIAN',
@@ -550,13 +604,15 @@ const LESSONS: Lesson[] = [
           'Keluhan memberi masukan untuk memperbaiki layanan',
         ],
         answerKey: 'D',
-        explanation: 'Sebagian besar orang yang kecewa diam saja; yang mengeluh memberi kita kesempatan memperbaiki.',
+        explanation:
+          'Sebagian besar orang yang kecewa diam saja; yang mengeluh memberi kita kesempatan memperbaiki.',
       },
       {
         type: 'SUSUN_KALIMAT',
         prompt: SUSUN,
         answerKey: 'Thank you for your valuable feedback',
-        explanation: '"Thank you for your valuable feedback." = Terima kasih atas masukan Anda yang berharga.',
+        explanation:
+          '"Thank you for your valuable feedback." = Terima kasih atas masukan Anda yang berharga.',
       },
     ],
   },
@@ -571,7 +627,8 @@ const LESSONS: Lesson[] = [
         prompt: 'I ___ send a technician to your office this afternoon.',
         answerKey: 'will',
         acceptedAnswers: ['will', 'shall'],
-        explanation: '"I/We will + kata kerja dasar" untuk menyampaikan tindakan yang akan dilakukan.',
+        explanation:
+          '"I/We will + kata kerja dasar" untuk menyampaikan tindakan yang akan dilakukan.',
       },
       {
         type: 'PILIHAN_GANDA',
@@ -589,7 +646,8 @@ const LESSONS: Lesson[] = [
         type: 'SUSUN_KALIMAT',
         prompt: SUSUN,
         answerKey: 'Let me check with the vendor first',
-        explanation: '"Let me + kata kerja dasar" = Izinkan saya… — alternatif sopan dari "I will".',
+        explanation:
+          '"Let me + kata kerja dasar" = Izinkan saya… — alternatif sopan dari "I will".',
       },
       {
         type: 'PILIHAN_GANDA',
@@ -607,7 +665,8 @@ const LESSONS: Lesson[] = [
         type: 'ISIAN',
         prompt: 'I am ___ that we have made a mistake with your order.',
         answerKey: 'afraid',
-        explanation: '"I am afraid (that)…" = menyampaikan kabar buruk dengan halus.',
+        explanation:
+          '"I am afraid (that)…" = menyampaikan kabar buruk dengan halus.',
       },
       {
         type: 'PILIHAN_GANDA',
@@ -619,7 +678,8 @@ const LESSONS: Lesson[] = [
           'Someone made a stupid mistake with your order.',
         ],
         answerKey: 'A',
-        explanation: '"It seems (that)…" / "It appears (that)…" = memperhalus kabar buruk.',
+        explanation:
+          '"It seems (that)…" / "It appears (that)…" = memperhalus kabar buruk.',
       },
       {
         type: 'SUSUN_KALIMAT',
@@ -632,7 +692,8 @@ const LESSONS: Lesson[] = [
         prompt: 'This should be ___ by the end of this week.',
         answerKey: 'resolved',
         acceptedAnswers: ['resolved', 'fixed', 'solved', 'done'],
-        explanation: '"Should be + V3" (pasif): masalah ini seharusnya selesai akhir minggu ini.',
+        explanation:
+          '"Should be + V3" (pasif): masalah ini seharusnya selesai akhir minggu ini.',
       },
       {
         type: 'PILIHAN_GANDA',
@@ -659,20 +720,23 @@ const LESSONS: Lesson[] = [
         prompt: '___ the technician fix the issue?',
         options: ['Was', 'Does', 'Did', 'Were'],
         answerKey: 'C',
-        explanation: 'Simple past, kalimat aktif: Did + subjek + kata kerja dasar?',
+        explanation:
+          'Simple past, kalimat aktif: Did + subjek + kata kerja dasar?',
       },
       {
         type: 'PILIHAN_GANDA',
         prompt: '___ the problem resolved successfully?',
         options: ['Did', 'Was', 'Were', 'Does'],
         answerKey: 'B',
-        explanation: 'Kalimat pasif masa lampau: Was/Were + subjek + V3? "Problem" tunggal → was.',
+        explanation:
+          'Kalimat pasif masa lampau: Was/Were + subjek + V3? "Problem" tunggal → was.',
       },
       {
         type: 'ISIAN',
         prompt: 'Did you ___ the new access card? (receive)',
         answerKey: 'receive',
-        explanation: 'Setelah "Did", kata kerjanya kembali ke bentuk dasar: receive (bukan received).',
+        explanation:
+          'Setelah "Did", kata kerjanya kembali ke bentuk dasar: receive (bukan received).',
       },
       {
         type: 'PILIHAN_GANDA',
@@ -696,7 +760,8 @@ const LESSONS: Lesson[] = [
         type: 'SUSUN_KALIMAT',
         prompt: SUSUN,
         answerKey: 'Did everything work out well',
-        explanation: '"Did everything work out well?" = Apakah semuanya berjalan baik?',
+        explanation:
+          '"Did everything work out well?" = Apakah semuanya berjalan baik?',
       },
       {
         type: 'PILIHAN_GANDA',
@@ -714,14 +779,16 @@ const LESSONS: Lesson[] = [
         type: 'SUSUN_KALIMAT',
         prompt: SUSUN,
         answerKey: 'I just wanted to follow up on your request',
-        explanation: '"I just wanted to follow up on…" = pembuka saat mengonfirmasi tindak lanjut.',
+        explanation:
+          '"I just wanted to follow up on…" = pembuka saat mengonfirmasi tindak lanjut.',
       },
       {
         type: 'ISIAN',
         prompt: 'Was the problem resolved? Do you have any other ___?',
         answerKey: 'concerns',
         acceptedAnswers: ['concerns', 'questions', 'issues', 'problems'],
-        explanation: '"Do you have any other concerns?" = Apakah ada keluhan lain?',
+        explanation:
+          '"Do you have any other concerns?" = Apakah ada keluhan lain?',
       },
     ],
   },
@@ -742,7 +809,8 @@ const LESSONS: Lesson[] = [
         ],
         answerKey: 'D',
         passage: EMAIL_COMPLAINT,
-        explanation: '"I am writing to complain about…" — pengirimannya terlambat dan sebagian rusak.',
+        explanation:
+          '"I am writing to complain about…" — pengirimannya terlambat dan sebagian rusak.',
       },
       {
         type: 'ISIAN',
@@ -750,7 +818,8 @@ const LESSONS: Lesson[] = [
         answerKey: '9',
         acceptedAnswers: ['9', '9th', 'nine', 'ninth'],
         passage: EMAIL_COMPLAINT,
-        explanation: '"…the boxes did not arrive until May 9." Tanggal 5 adalah janji pengiriman.',
+        explanation:
+          '"…the boxes did not arrive until May 9." Tanggal 5 adalah janji pengiriman.',
       },
       {
         type: 'PILIHAN_GANDA',
@@ -763,7 +832,8 @@ const LESSONS: Lesson[] = [
         ],
         answerKey: 'B',
         passage: EMAIL_COMPLAINT,
-        explanation: '"I would like you to replace the three damaged boxes this week."',
+        explanation:
+          '"I would like you to replace the three damaged boxes this week."',
       },
       {
         type: 'PILIHAN_GANDA',
@@ -776,7 +846,8 @@ const LESSONS: Lesson[] = [
         ],
         answerKey: 'C',
         passage: EMAIL_COMPLAINT,
-        explanation: '"I would like you to…" = ungkapan harapan penyelesaian keluhan.',
+        explanation:
+          '"I would like you to…" = ungkapan harapan penyelesaian keluhan.',
       },
       {
         type: 'PILIHAN_GANDA',
@@ -789,14 +860,16 @@ const LESSONS: Lesson[] = [
         ],
         answerKey: 'C',
         passage: EMAIL_REPLY,
-        explanation: '"The delay was due to a problem with our delivery truck."',
+        explanation:
+          '"The delay was due to a problem with our delivery truck."',
       },
       {
         type: 'ISIAN',
         prompt: 'The new boxes will be sent on ___.',
         answerKey: 'Thursday',
         passage: EMAIL_REPLY,
-        explanation: '"We will send three new boxes to your office on Thursday."',
+        explanation:
+          '"We will send three new boxes to your office on Thursday."',
       },
       {
         type: 'PILIHAN_GANDA',
@@ -809,11 +882,13 @@ const LESSONS: Lesson[] = [
         ],
         answerKey: 'A',
         passage: EMAIL_REPLY,
-        explanation: '"With regard to your recent email" = merujuk kontak sebelumnya, pembuka balasan yang formal.',
+        explanation:
+          '"With regard to your recent email" = merujuk kontak sebelumnya, pembuka balasan yang formal.',
       },
       {
         type: 'PILIHAN_GANDA',
-        prompt: 'Which closing is the most suitable for a formal reply to a complaint?',
+        prompt:
+          'Which closing is the most suitable for a formal reply to a complaint?',
         options: ['Cheers', 'See ya', 'Yours sincerely', 'Thanks again'],
         answerKey: 'C',
         passage: EMAIL_REPLY,
@@ -825,7 +900,8 @@ const LESSONS: Lesson[] = [
         options: ['Hai Rina,', 'Yo Rina!', 'Hey there,', 'Dear Ms. Putri,'],
         answerKey: 'D',
         passage: EMAIL_COMPLAINT,
-        explanation: 'Email formal: pakai "Dear" + gelar + nama belakang pengirim.',
+        explanation:
+          'Email formal: pakai "Dear" + gelar + nama belakang pengirim.',
       },
     ],
   },
@@ -846,7 +922,8 @@ const LESSONS: Lesson[] = [
         ],
         answerKey: 'B',
         tts: 'Thank you for calling the IT helpdesk, this is Andi speaking. How may I assist you?',
-        explanation: '"Thank you for calling…, this is… speaking. How may I assist you?" = salam pembuka + menawarkan bantuan.',
+        explanation:
+          '"Thank you for calling…, this is… speaking. How may I assist you?" = salam pembuka + menawarkan bantuan.',
       },
       {
         type: 'PILIHAN_GANDA',
@@ -859,15 +936,17 @@ const LESSONS: Lesson[] = [
         ],
         answerKey: 'C',
         tts: 'Hi, this is Dewi from Finance. I have been having an issue with my email since this morning. I cannot send any messages.',
-        explanation: '"…I cannot send any messages." — masalahnya mengirim email.',
+        explanation:
+          '"…I cannot send any messages." — masalahnya mengirim email.',
       },
       {
         type: 'ISIAN',
-        prompt: 'The helpdesk asks for the caller\'s employee ___.',
+        prompt: "The helpdesk asks for the caller's employee ___.",
         answerKey: 'ID',
         acceptedAnswers: ['ID', 'ID number', 'number'],
         tts: 'Before we proceed, could you please tell me your employee ID number?',
-        explanation: '"…your employee ID number" — verifikasi data sebelum menangani keluhan.',
+        explanation:
+          '"…your employee ID number" — verifikasi data sebelum menangani keluhan.',
       },
       {
         type: 'PILIHAN_GANDA',
@@ -880,7 +959,8 @@ const LESSONS: Lesson[] = [
         ],
         answerKey: 'B',
         tts: 'I do apologize for the trouble. I understand how frustrating that must be.',
-        explanation: '"I do apologize…" = minta maaf; "I understand how frustrating…" = empati.',
+        explanation:
+          '"I do apologize…" = minta maaf; "I understand how frustrating…" = empati.',
       },
       {
         type: 'PILIHAN_GANDA',
@@ -914,7 +994,8 @@ const LESSONS: Lesson[] = [
         ],
         answerKey: 'A',
         tts: 'Did the reset fix the problem? I just want to make sure everything works.',
-        explanation: '"Did the reset fix the problem?" = konfirmasi penyelesaian (simple past).',
+        explanation:
+          '"Did the reset fix the problem?" = konfirmasi penyelesaian (simple past).',
       },
       {
         type: 'PILIHAN_GANDA',
@@ -922,7 +1003,8 @@ const LESSONS: Lesson[] = [
         options: ['Opening', 'Verification', 'Closing', 'Complaint'],
         answerKey: 'C',
         tts: 'Is there anything else I may assist you with? Thank you for calling, and have a great day.',
-        explanation: '"Is there anything else…? Thank you for calling…" = penutup percakapan.',
+        explanation:
+          '"Is there anything else…? Thank you for calling…" = penutup percakapan.',
       },
     ],
   },
@@ -985,14 +1067,6 @@ const LESSONS: Lesson[] = [
 ];
 
 async function main() {
-  const useTts = hasMacTts();
-  const store = makeAudioStore();
-  if (!useTts) {
-    console.warn(
-      `⚠ TTS macOS (say/afconvert) tidak tersedia — memakai .m4a yang sudah ada di ${store.label}; sisanya WAV senyap.`,
-    );
-  }
-
   // urutan lesson: lanjut dari max(order) level ini (pola importer)
   const maxOrder = await prisma.lesson.aggregate({
     where: { level: LEVEL },
@@ -1034,19 +1108,16 @@ async function main() {
         continue;
       }
       const it = dl.items[i];
-      let mediaFile: string | null = null;
-      if (it.tts) {
-        mediaFile = await makeAudio(
-          `${dl.code.toLowerCase()}-${String(order).padStart(2, '0')}`,
-          it.tts,
-          useTts,
-          store,
-        );
-        audioFiles++;
-      }
+      if (it.tts) audioFiles++;
       const acceptedAnswers =
         it.type === 'ISIAN'
-          ? Array.from(new Set([it.answerKey, ...(it.acceptedAnswers ?? [])].map((a) => a.trim())))
+          ? Array.from(
+              new Set(
+                [it.answerKey, ...(it.acceptedAnswers ?? [])].map((a) =>
+                  a.trim(),
+                ),
+              ),
+            )
           : [];
       await prisma.item.create({
         data: {
@@ -1058,7 +1129,7 @@ async function main() {
           answerKey: it.answerKey,
           acceptedAnswers,
           explanation: it.explanation,
-          mediaFile,
+          ttsText: it.tts ?? null,
           passage: it.passage ?? null,
           status: 'LIVE',
         },
@@ -1072,9 +1143,11 @@ async function main() {
   );
 }
 
-main()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  })
-  .finally(() => prisma.$disconnect());
+// Dijalankan hanya bila dipanggil langsung — definisi diimpor seed-tts-entries.
+if (require.main === module)
+  main()
+    .catch((e) => {
+      console.error(e);
+      process.exit(1);
+    })
+    .finally(() => prisma.$disconnect());

@@ -1,6 +1,5 @@
 import 'dotenv/config';
 import { PrismaClient, ItemType, Level, Cefr, SkillTag } from '@prisma/client';
-import { hasMacTts, makeAudio, makeAudioStore } from './seed-audio';
 
 /**
  * Seed DEMO — satu modul pembelajaran lengkap per level supaya semua
@@ -15,13 +14,8 @@ import { hasMacTts, makeAudio, makeAudioStore } from './seed-audio';
  * jalankan manual saja: `npm run seed:demo`. Idempoten: upsert by
  * (lesson.code) dan (lessonId, order); aman dijalankan berulang.
  *
- * Audio listening: dibangkitkan nyata via TTS `say` + `afconvert`
- * (bawaan macOS) sebagai .m4a. Tujuan penyimpanan mengikuti STORAGE_DRIVER:
- * minio → objek di bucket (env MINIO_*), selain itu → STORAGE_DIR lokal.
- * Bila `<nama>.m4a` sudah ada di storage tujuan (mis. diunggah lebih dulu
- * lewat `npm run audio:push:minio`), itu yang dipakai. Bila TTS tak
- * tersedia (mis. Linux) dan .m4a tidak ada, fallback .wav senyap 1 detik
- * supaya player tetap berfungsi — ganti via halaman Media admin.
+ * Audio listening: field `tts` disimpan ke Item.ttsText — audio Kokoro dibuat
+ * server saat pertama diputar atau lewat `npm run tts:backfill`.
  */
 
 const prisma = new PrismaClient();
@@ -34,7 +28,7 @@ type DemoItem = {
   acceptedAnswers?: string[];
   explanation: string;
   passage?: string;
-  /** teks TTS — bila diisi, file audio dibuat & item.mediaFile menunjuk ke sana */
+  /** teks yang dibacakan suara AI → Item.ttsText */
   tts?: string;
 };
 
@@ -70,14 +64,16 @@ const DASAR_LESSONS: DemoLesson[] = [
         prompt: 'What does "crowded" mean?',
         options: ['Sepi', 'Ramai', 'Bersih', 'Bising'],
         answerKey: 'B',
-        explanation: '"Crowded" = ramai/penuh orang. "The market is crowded on Sunday."',
+        explanation:
+          '"Crowded" = ramai/penuh orang. "The market is crowded on Sunday."',
       },
       {
         type: 'ISIAN',
         prompt: 'Can I ___ your pen for a minute?',
         answerKey: 'borrow',
         acceptedAnswers: ['borrow', 'use'],
-        explanation: 'Meminjam barang orang lain = "borrow". (Lawannya "lend" = meminjamkan.)',
+        explanation:
+          'Meminjam barang orang lain = "borrow". (Lawannya "lend" = meminjamkan.)',
       },
       {
         type: 'PILIHAN_GANDA',
@@ -91,7 +87,8 @@ const DASAR_LESSONS: DemoLesson[] = [
         prompt: 'I usually ___ up at six in the morning.',
         answerKey: 'wake',
         acceptedAnswers: ['wake', 'get'],
-        explanation: '"Wake up" / "get up" = bangun tidur. Keduanya lazim dipakai.',
+        explanation:
+          '"Wake up" / "get up" = bangun tidur. Keduanya lazim dipakai.',
       },
       {
         type: 'PILIHAN_GANDA',
@@ -105,7 +102,8 @@ const DASAR_LESSONS: DemoLesson[] = [
         prompt: "Let's ___ dinner together tonight.",
         answerKey: 'have',
         acceptedAnswers: ['have', 'eat', 'get'],
-        explanation: 'Untuk makan bersama, bahasa Inggris memakai "have dinner" (bukan "do dinner").',
+        explanation:
+          'Untuk makan bersama, bahasa Inggris memakai "have dinner" (bukan "do dinner").',
       },
       {
         type: 'PILIHAN_GANDA',
@@ -131,14 +129,16 @@ const DASAR_LESSONS: DemoLesson[] = [
         type: 'SUSUN_KALIMAT',
         prompt: 'Susun kalimat berikut:',
         answerKey: 'How was your weekend',
-        explanation: 'Pola pertanyaan lampau: How + was + subjek. Sapaan umum hari Senin.',
+        explanation:
+          'Pola pertanyaan lampau: How + was + subjek. Sapaan umum hari Senin.',
       },
       {
         type: 'PILIHAN_GANDA',
         prompt: '"___ you like some coffee?"',
         options: ['Do', 'Would', 'Are', 'Will'],
         answerKey: 'B',
-        explanation: '"Would you like ...?" = tawaran yang sopan. "Do you like" menanyakan kesukaan umum.',
+        explanation:
+          '"Would you like ...?" = tawaran yang sopan. "Do you like" menanyakan kesukaan umum.',
       },
       {
         type: 'ISIAN',
@@ -158,27 +158,31 @@ const DASAR_LESSONS: DemoLesson[] = [
         prompt: '"She ___ watching a movie right now."',
         options: ['are', 'be', 'is', 'was'],
         answerKey: 'C',
-        explanation: '"Right now" = present continuous: is/are + -ing. Subjek "she" → "is".',
+        explanation:
+          '"Right now" = present continuous: is/are + -ing. Subjek "she" → "is".',
       },
       {
         type: 'ISIAN',
         prompt: 'We have lived here ___ 2020.',
         answerKey: 'since',
         acceptedAnswers: ['since'],
-        explanation: '"Since" + titik waktu (2020); "for" + durasi (five years).',
+        explanation:
+          '"Since" + titik waktu (2020); "for" + durasi (five years).',
       },
       {
         type: 'SUSUN_KALIMAT',
         prompt: 'Susun kalimat berikut:',
         answerKey: 'Could you help me with this',
-        explanation: '"Could you ...?" = permintaan sopan, lebih halus dari "Can you".',
+        explanation:
+          '"Could you ...?" = permintaan sopan, lebih halus dari "Can you".',
       },
       {
         type: 'ISIAN',
         prompt: 'There ___ many people at the park today.',
         answerKey: 'are',
         acceptedAnswers: ['are', 'were'],
-        explanation: '"Many people" jamak → "are" (atau "were" bila bercerita lampau).',
+        explanation:
+          '"Many people" jamak → "are" (atau "were" bila bercerita lampau).',
       },
       {
         type: 'UCAPAN',
@@ -196,11 +200,17 @@ const DASAR_LESSONS: DemoLesson[] = [
       {
         type: 'PILIHAN_GANDA',
         prompt: 'Where are they meeting?',
-        options: ['At the station', 'At the cafe', "At Dina's house", 'At the park'],
+        options: [
+          'At the station',
+          'At the cafe',
+          "At Dina's house",
+          'At the park',
+        ],
         answerKey: 'B',
         passage:
           "Hi Rina! We're meeting at the cafe near the station at 4 PM. Dina is coming too, but she will be 30 minutes late. See you there!",
-        explanation: 'Kalimat pertama: "meeting at the cafe near the station" — di kafe, bukan stasiunnya.',
+        explanation:
+          'Kalimat pertama: "meeting at the cafe near the station" — di kafe, bukan stasiunnya.',
       },
       {
         type: 'PILIHAN_GANDA',
@@ -232,11 +242,17 @@ const DASAR_LESSONS: DemoLesson[] = [
       {
         type: 'PILIHAN_GANDA',
         prompt: 'Why is the water turned off?',
-        options: ['Pipe cleaning', 'Water shortage', 'Broken pump', 'Painting work'],
+        options: [
+          'Pipe cleaning',
+          'Water shortage',
+          'Broken pump',
+          'Painting work',
+        ],
         answerKey: 'A',
         passage:
           'NOTICE: The apartment water supply will be off on Saturday from 9 AM to 1 PM for pipe cleaning. Please store enough water before Saturday morning.',
-        explanation: 'Alasannya disebut di akhir kalimat pertama: "for pipe cleaning".',
+        explanation:
+          'Alasannya disebut di akhir kalimat pertama: "for pipe cleaning".',
       },
       {
         type: 'ISIAN',
@@ -259,7 +275,12 @@ const DASAR_LESSONS: DemoLesson[] = [
       {
         type: 'PILIHAN_GANDA',
         prompt: "Why shouldn't Mom wait for dinner?",
-        options: ['He is not hungry', 'He already ate', 'He will cook himself', 'He eats at 7'],
+        options: [
+          'He is not hungry',
+          'He already ate',
+          'He will cook himself',
+          'He eats at 7',
+        ],
         answerKey: 'B',
         passage:
           "Hi Mom, I'm still at the library finishing my homework. I'll take the 7 o'clock bus home, so please don't wait for dinner. I already ate with my friends.",
@@ -281,15 +302,26 @@ const DASAR_LESSONS: DemoLesson[] = [
       {
         type: 'PILIHAN_GANDA',
         prompt: 'What does the speaker want to buy?',
-        options: ['Bus tickets', 'Museum tickets', 'Movie tickets', 'Train tickets'],
+        options: [
+          'Bus tickets',
+          'Museum tickets',
+          'Movie tickets',
+          'Train tickets',
+        ],
         answerKey: 'B',
         tts: 'Good morning! Two tickets to the city museum, please.',
-        explanation: 'Pembicara berkata: "Two tickets to the city museum, please."',
+        explanation:
+          'Pembicara berkata: "Two tickets to the city museum, please."',
       },
       {
         type: 'PILIHAN_GANDA',
         prompt: 'How often does the bus leave?',
-        options: ['Every 30 minutes', 'Every hour', 'Every 15 minutes', 'Twice a day'],
+        options: [
+          'Every 30 minutes',
+          'Every hour',
+          'Every 15 minutes',
+          'Twice a day',
+        ],
         answerKey: 'A',
         tts: 'The bus to the airport leaves every thirty minutes.',
         explanation: '"...leaves every thirty minutes" = tiap 30 menit.',
@@ -329,7 +361,12 @@ const DASAR_LESSONS: DemoLesson[] = [
       {
         type: 'PILIHAN_GANDA',
         prompt: 'When do they plan to watch a movie?',
-        options: ['Friday night', 'Sunday morning', 'Saturday morning', 'Saturday evening'],
+        options: [
+          'Friday night',
+          'Sunday morning',
+          'Saturday morning',
+          'Saturday evening',
+        ],
         answerKey: 'D',
         tts: "Let's watch a movie on Saturday evening.",
         explanation: '"on Saturday evening" = Sabtu malam.',
@@ -337,10 +374,16 @@ const DASAR_LESSONS: DemoLesson[] = [
       {
         type: 'PILIHAN_GANDA',
         prompt: 'Where should you turn left?',
-        options: ['At the traffic light', 'At the corner', 'At the bridge', 'At the school'],
+        options: [
+          'At the traffic light',
+          'At the corner',
+          'At the bridge',
+          'At the school',
+        ],
         answerKey: 'A',
         tts: 'Please turn left at the traffic light.',
-        explanation: '"turn left at the traffic light" = belok kiri di lampu merah.',
+        explanation:
+          '"turn left at the traffic light" = belok kiri di lampu merah.',
       },
     ],
   },
@@ -357,14 +400,16 @@ const MENENGAH_LESSONS: DemoLesson[] = [
         prompt: 'What does "deadline" mean?',
         options: ['Batas waktu', 'Jadwal rapat', 'Hari libur', 'Jam lembur'],
         answerKey: 'A',
-        explanation: '"Deadline" = batas waktu. "The deadline for this report is Friday."',
+        explanation:
+          '"Deadline" = batas waktu. "The deadline for this report is Friday."',
       },
       {
         type: 'PILIHAN_GANDA',
         prompt: 'What does "colleague" mean?',
         options: ['Atasan', 'Rekan kerja', 'Klien', 'Pelamar'],
         answerKey: 'B',
-        explanation: '"Colleague" = rekan kerja. "She is my colleague from the finance team."',
+        explanation:
+          '"Colleague" = rekan kerja. "She is my colleague from the finance team."',
       },
       {
         type: 'ISIAN',
@@ -378,7 +423,8 @@ const MENENGAH_LESSONS: DemoLesson[] = [
         prompt: 'What does "attach" mean in an email?',
         options: ['Meneruskan', 'Menghapus', 'Melampirkan', 'Membalas'],
         answerKey: 'C',
-        explanation: '"Attach" = melampirkan file. "I attached the invoice to this email."',
+        explanation:
+          '"Attach" = melampirkan file. "I attached the invoice to this email."',
       },
       {
         type: 'ISIAN',
@@ -392,7 +438,8 @@ const MENENGAH_LESSONS: DemoLesson[] = [
         prompt: 'What does "postpone" mean?',
         options: ['Membatalkan', 'Mempercepat', 'Memulai', 'Menunda'],
         answerKey: 'D',
-        explanation: '"Postpone" = menunda. "The meeting was postponed to next week."',
+        explanation:
+          '"Postpone" = menunda. "The meeting was postponed to next week."',
       },
       {
         type: 'ISIAN',
@@ -404,9 +451,15 @@ const MENENGAH_LESSONS: DemoLesson[] = [
       {
         type: 'PILIHAN_GANDA',
         prompt: 'What does "follow up" mean?',
-        options: ['Menindaklanjuti', 'Mengikuti rapat', 'Menyusul terlambat', 'Memeriksa email'],
+        options: [
+          'Menindaklanjuti',
+          'Mengikuti rapat',
+          'Menyusul terlambat',
+          'Memeriksa email',
+        ],
         answerKey: 'A',
-        explanation: '"Follow up" = menindaklanjuti. "I will follow up on your request tomorrow."',
+        explanation:
+          '"Follow up" = menindaklanjuti. "I will follow up on your request tomorrow."',
       },
     ],
   },
@@ -419,47 +472,54 @@ const MENENGAH_LESSONS: DemoLesson[] = [
         type: 'SUSUN_KALIMAT',
         prompt: 'Susun kalimat berikut:',
         answerKey: 'I have finished the monthly report',
-        explanation: 'Present perfect (have + V3) untuk pekerjaan yang baru saja selesai.',
+        explanation:
+          'Present perfect (have + V3) untuk pekerjaan yang baru saja selesai.',
       },
       {
         type: 'PILIHAN_GANDA',
         prompt: '"The meeting ___ moved to 3 PM."',
         options: ['has been', 'have been', 'is being move', 'was be'],
         answerKey: 'A',
-        explanation: 'Kalimat pasif present perfect: has been + V3. Subjek "the meeting" tunggal.',
+        explanation:
+          'Kalimat pasif present perfect: has been + V3. Subjek "the meeting" tunggal.',
       },
       {
         type: 'ISIAN',
         prompt: 'If you need help, please ___ me know.',
         answerKey: 'let',
         acceptedAnswers: ['let'],
-        explanation: '"Let me know" = beri tahu saya. Frasa sangat umum di email kerja.',
+        explanation:
+          '"Let me know" = beri tahu saya. Frasa sangat umum di email kerja.',
       },
       {
         type: 'SUSUN_KALIMAT',
         prompt: 'Susun kalimat berikut:',
         answerKey: 'Could you send me the file by noon',
-        explanation: '"Could you ...?" permintaan sopan; "by noon" = paling lambat tengah hari.',
+        explanation:
+          '"Could you ...?" permintaan sopan; "by noon" = paling lambat tengah hari.',
       },
       {
         type: 'PILIHAN_GANDA',
         prompt: '"She ___ working here since 2019."',
         options: ['is', 'has been', 'was', 'will be'],
         answerKey: 'B',
-        explanation: '"Since 2019" menuntut present perfect continuous: has been + -ing.',
+        explanation:
+          '"Since 2019" menuntut present perfect continuous: has been + -ing.',
       },
       {
         type: 'ISIAN',
         prompt: 'The report was written ___ our team.',
         answerKey: 'by',
         acceptedAnswers: ['by'],
-        explanation: 'Kalimat pasif memakai "by" untuk pelaku: "written by our team".',
+        explanation:
+          'Kalimat pasif memakai "by" untuk pelaku: "written by our team".',
       },
       {
         type: 'SUSUN_KALIMAT',
         prompt: 'Susun kalimat berikut:',
         answerKey: 'We are going to launch the product next month',
-        explanation: 'Rencana yang sudah pasti memakai "be going to" + kata kerja dasar.',
+        explanation:
+          'Rencana yang sudah pasti memakai "be going to" + kata kerja dasar.',
       },
       {
         type: 'PILIHAN_GANDA',
@@ -482,12 +542,18 @@ const MENENGAH_LESSONS: DemoLesson[] = [
         answerKey: 'B',
         passage:
           'Dear team, The client meeting has been moved from Tuesday to Thursday at 10 AM in Meeting Room B. Please update your calendars and prepare the sales report beforehand. Regards, Maya',
-        explanation: '"...moved from Tuesday to Thursday" — jadwal barunya Kamis.',
+        explanation:
+          '"...moved from Tuesday to Thursday" — jadwal barunya Kamis.',
       },
       {
         type: 'PILIHAN_GANDA',
         prompt: 'What should the team prepare?',
-        options: ['The budget plan', 'The meeting room', 'The sales report', 'The invitation'],
+        options: [
+          'The budget plan',
+          'The meeting room',
+          'The sales report',
+          'The invitation',
+        ],
         answerKey: 'C',
         passage:
           'Dear team, The client meeting has been moved from Tuesday to Thursday at 10 AM in Meeting Room B. Please update your calendars and prepare the sales report beforehand. Regards, Maya',
@@ -532,16 +598,27 @@ const MENENGAH_LESSONS: DemoLesson[] = [
       {
         type: 'PILIHAN_GANDA',
         prompt: 'What is happening on Friday?',
-        options: ['An office party', 'Elevator maintenance', 'A fire drill', 'A building closure'],
+        options: [
+          'An office party',
+          'Elevator maintenance',
+          'A fire drill',
+          'A building closure',
+        ],
         answerKey: 'B',
         passage:
           'NOTICE: The office elevator will be under maintenance on Friday. Please use the stairs or the elevator in Building B. We apologize for the inconvenience.',
-        explanation: '"The office elevator will be under maintenance on Friday."',
+        explanation:
+          '"The office elevator will be under maintenance on Friday."',
       },
       {
         type: 'PILIHAN_GANDA',
         prompt: 'What should employees use instead?',
-        options: ['The parking lift', 'The escalator', 'The stairs', 'The back door'],
+        options: [
+          'The parking lift',
+          'The escalator',
+          'The stairs',
+          'The back door',
+        ],
         answerKey: 'C',
         passage:
           'NOTICE: The office elevator will be under maintenance on Friday. Please use the stairs or the elevator in Building B. We apologize for the inconvenience.',
@@ -584,12 +661,18 @@ const MENENGAH_LESSONS: DemoLesson[] = [
         options: ['A refund', 'The sales division', 'A meeting', 'An invoice'],
         answerKey: 'B',
         tts: 'Could you put me through to the sales division, please?',
-        explanation: '"Put me through to..." = sambungkan ke (divisi penjualan).',
+        explanation:
+          '"Put me through to..." = sambungkan ke (divisi penjualan).',
       },
       {
         type: 'PILIHAN_GANDA',
         prompt: 'When is the report due?',
-        options: ['Wednesday afternoon', 'Wednesday morning', 'Thursday', 'Friday afternoon'],
+        options: [
+          'Wednesday afternoon',
+          'Wednesday morning',
+          'Thursday',
+          'Friday afternoon',
+        ],
         answerKey: 'A',
         tts: 'Please submit the financial report by Wednesday afternoon.',
         explanation: '"...by Wednesday afternoon."',
@@ -605,7 +688,12 @@ const MENENGAH_LESSONS: DemoLesson[] = [
       {
         type: 'PILIHAN_GANDA',
         prompt: 'Why is Mr. Tanaka calling?',
-        options: ['To cancel his order', 'To reschedule his appointment', 'To make a complaint', 'To ask for directions'],
+        options: [
+          'To cancel his order',
+          'To reschedule his appointment',
+          'To make a complaint',
+          'To ask for directions',
+        ],
         answerKey: 'B',
         tts: 'Mr. Tanaka is calling to reschedule his appointment to next Monday.',
         explanation: '"...to reschedule his appointment."',
@@ -613,7 +701,12 @@ const MENENGAH_LESSONS: DemoLesson[] = [
       {
         type: 'PILIHAN_GANDA',
         prompt: 'What does the speaker offer?',
-        options: ['To print the report', 'To call back later', 'To email the meeting notes', 'To book a room'],
+        options: [
+          'To print the report',
+          'To call back later',
+          'To email the meeting notes',
+          'To book a room',
+        ],
         answerKey: 'C',
         tts: 'Would you like me to email you the meeting notes?',
         explanation: '"Would you like me to email you the meeting notes?"',
@@ -633,14 +726,16 @@ const MAHIR_LESSONS: DemoLesson[] = [
         prompt: 'What does "leverage" mean in a business context?',
         options: ['Memanfaatkan', 'Meminjam', 'Menilai', 'Menolak'],
         answerKey: 'A',
-        explanation: '"Leverage" = memanfaatkan sesuatu untuk hasil maksimal. "We can leverage our network."',
+        explanation:
+          '"Leverage" = memanfaatkan sesuatu untuk hasil maksimal. "We can leverage our network."',
       },
       {
         type: 'PILIHAN_GANDA',
         prompt: 'What does "feasible" mean?',
         options: ['Menguntungkan', 'Layak dilakukan', 'Berisiko', 'Wajib'],
         answerKey: 'B',
-        explanation: '"Feasible" = layak/mungkin dikerjakan. "Is the plan feasible within this budget?"',
+        explanation:
+          '"Feasible" = layak/mungkin dikerjakan. "Is the plan feasible within this budget?"',
       },
       {
         type: 'ISIAN',
@@ -652,9 +747,15 @@ const MAHIR_LESSONS: DemoLesson[] = [
       {
         type: 'PILIHAN_GANDA',
         prompt: 'What does "stakeholder" mean?',
-        options: ['Pemegang saham saja', 'Pesaing bisnis', 'Pemangku kepentingan', 'Penanam modal asing'],
+        options: [
+          'Pemegang saham saja',
+          'Pesaing bisnis',
+          'Pemangku kepentingan',
+          'Penanam modal asing',
+        ],
         answerKey: 'C',
-        explanation: '"Stakeholder" = semua pihak yang berkepentingan (karyawan, klien, investor, dst.), lebih luas dari "shareholder".',
+        explanation:
+          '"Stakeholder" = semua pihak yang berkepentingan (karyawan, klien, investor, dst.), lebih luas dari "shareholder".',
       },
       {
         type: 'ISIAN',
@@ -666,23 +767,36 @@ const MAHIR_LESSONS: DemoLesson[] = [
       {
         type: 'PILIHAN_GANDA',
         prompt: 'What does "streamline" mean?',
-        options: ['Menyederhanakan proses', 'Memperluas pasar', 'Menambah staf', 'Menunda proyek'],
+        options: [
+          'Menyederhanakan proses',
+          'Memperluas pasar',
+          'Menambah staf',
+          'Menunda proyek',
+        ],
         answerKey: 'A',
-        explanation: '"Streamline" = membuat proses lebih sederhana dan efisien.',
+        explanation:
+          '"Streamline" = membuat proses lebih sederhana dan efisien.',
       },
       {
         type: 'ISIAN',
         prompt: 'Our revenue grew ___ fifteen percent last quarter.',
         answerKey: 'by',
         acceptedAnswers: ['by'],
-        explanation: 'Pertumbuhan sebesar X% memakai "by": "grew by fifteen percent".',
+        explanation:
+          'Pertumbuhan sebesar X% memakai "by": "grew by fifteen percent".',
       },
       {
         type: 'PILIHAN_GANDA',
         prompt: 'What does "contingency plan" mean?',
-        options: ['Rencana utama', 'Rencana anggaran', 'Rencana promosi', 'Rencana cadangan'],
+        options: [
+          'Rencana utama',
+          'Rencana anggaran',
+          'Rencana promosi',
+          'Rencana cadangan',
+        ],
         answerKey: 'D',
-        explanation: '"Contingency plan" = rencana cadangan bila skenario utama gagal.',
+        explanation:
+          '"Contingency plan" = rencana cadangan bila skenario utama gagal.',
       },
     ],
   },
@@ -695,14 +809,16 @@ const MAHIR_LESSONS: DemoLesson[] = [
         type: 'SUSUN_KALIMAT',
         prompt: 'Susun kalimat berikut:',
         answerKey: 'The proposal should have been submitted yesterday',
-        explanation: '"Should have been + V3" = seharusnya sudah (pasif) — penyesalan/kritik halus.',
+        explanation:
+          '"Should have been + V3" = seharusnya sudah (pasif) — penyesalan/kritik halus.',
       },
       {
         type: 'PILIHAN_GANDA',
         prompt: '"___ the challenges, the team delivered on time."',
         options: ['Despite', 'Although', 'Even', 'However'],
         answerKey: 'A',
-        explanation: '"Despite" + frasa benda. "Although" butuh klausa (subjek + kata kerja).',
+        explanation:
+          '"Despite" + frasa benda. "Although" butuh klausa (subjek + kata kerja).',
       },
       {
         type: 'ISIAN',
@@ -715,14 +831,21 @@ const MAHIR_LESSONS: DemoLesson[] = [
         type: 'SUSUN_KALIMAT',
         prompt: 'Susun kalimat berikut:',
         answerKey: 'Should you have any questions please contact us',
-        explanation: 'Inversi formal: "Should you ..." = "If you should ..." — lazim di surat bisnis.',
+        explanation:
+          'Inversi formal: "Should you ..." = "If you should ..." — lazim di surat bisnis.',
       },
       {
         type: 'PILIHAN_GANDA',
         prompt: '"By next year, we ___ the new system."',
-        options: ['will have implemented', 'will implement', 'have implemented', 'implemented'],
+        options: [
+          'will have implemented',
+          'will implement',
+          'have implemented',
+          'implemented',
+        ],
         answerKey: 'A',
-        explanation: '"By + waktu depan" menuntut future perfect: will have + V3.',
+        explanation:
+          '"By + waktu depan" menuntut future perfect: will have + V3.',
       },
       {
         type: 'ISIAN',
@@ -735,14 +858,16 @@ const MAHIR_LESSONS: DemoLesson[] = [
         type: 'SUSUN_KALIMAT',
         prompt: 'Susun kalimat berikut:',
         answerKey: 'The results were better than we had expected',
-        explanation: 'Past perfect ("had expected") untuk ekspektasi yang terjadi sebelum hasilnya.',
+        explanation:
+          'Past perfect ("had expected") untuk ekspektasi yang terjadi sebelum hasilnya.',
       },
       {
         type: 'PILIHAN_GANDA',
         prompt: '"The manager insisted that the report ___ revised."',
         options: ['be', 'is', 'was', 'were'],
         answerKey: 'A',
-        explanation: 'Subjunctive setelah "insist/suggest/demand that": kata kerja bentuk dasar — "that the report be revised".',
+        explanation:
+          'Subjunctive setelah "insist/suggest/demand that": kata kerja bentuk dasar — "that the report be revised".',
       },
     ],
   },
@@ -763,7 +888,12 @@ const MAHIR_LESSONS: DemoLesson[] = [
       {
         type: 'PILIHAN_GANDA',
         prompt: 'What condition applies to remote work?',
-        options: ['No meetings allowed', 'Core meetings attended in person', 'Weekly reports required', 'Daily manager approval'],
+        options: [
+          'No meetings allowed',
+          'Core meetings attended in person',
+          'Weekly reports required',
+          'Daily manager approval',
+        ],
         answerKey: 'B',
         passage:
           'MEMO: Starting next quarter, employees may work remotely up to three days per week, provided that core meetings are attended in person. Department heads will review arrangements monthly, and the policy will be evaluated after six months.',
@@ -781,7 +911,12 @@ const MAHIR_LESSONS: DemoLesson[] = [
       {
         type: 'PILIHAN_GANDA',
         prompt: 'What improved after the loyalty program launched?',
-        options: ['Acquisition costs', 'Customer retention', 'Staff morale', 'Product quality'],
+        options: [
+          'Acquisition costs',
+          'Customer retention',
+          'Staff morale',
+          'Product quality',
+        ],
         answerKey: 'B',
         passage:
           'Our latest survey indicates that customer retention improved significantly after the loyalty program launched. However, acquisition costs rose by 20 percent, suggesting we should rebalance the marketing budget toward retention channels.',
@@ -790,11 +925,17 @@ const MAHIR_LESSONS: DemoLesson[] = [
       {
         type: 'PILIHAN_GANDA',
         prompt: 'What does the report suggest?',
-        options: ['Cutting the loyalty program', 'Hiring more staff', 'Rebalancing the marketing budget', 'Raising prices'],
+        options: [
+          'Cutting the loyalty program',
+          'Hiring more staff',
+          'Rebalancing the marketing budget',
+          'Raising prices',
+        ],
         answerKey: 'C',
         passage:
           'Our latest survey indicates that customer retention improved significantly after the loyalty program launched. However, acquisition costs rose by 20 percent, suggesting we should rebalance the marketing budget toward retention channels.',
-        explanation: '"...we should rebalance the marketing budget toward retention channels."',
+        explanation:
+          '"...we should rebalance the marketing budget toward retention channels."',
       },
       {
         type: 'ISIAN',
@@ -808,7 +949,12 @@ const MAHIR_LESSONS: DemoLesson[] = [
       {
         type: 'PILIHAN_GANDA',
         prompt: 'What has the board approved?',
-        options: ['A merger', 'Market expansion', 'A new product', 'Budget cuts'],
+        options: [
+          'A merger',
+          'Market expansion',
+          'A new product',
+          'Budget cuts',
+        ],
         answerKey: 'B',
         passage:
           'Dear Ms. Rahma, Following our discussion, I am pleased to confirm that the board has approved the expansion into the Vietnamese market, effective January. A cross-functional team will be assembled next month to oversee the transition.',
@@ -817,11 +963,17 @@ const MAHIR_LESSONS: DemoLesson[] = [
       {
         type: 'PILIHAN_GANDA',
         prompt: 'When will the team be assembled?',
-        options: ['Effective January', 'Next month', 'Next quarter', 'Immediately'],
+        options: [
+          'Effective January',
+          'Next month',
+          'Next quarter',
+          'Immediately',
+        ],
         answerKey: 'B',
         passage:
           'Dear Ms. Rahma, Following our discussion, I am pleased to confirm that the board has approved the expansion into the Vietnamese market, effective January. A cross-functional team will be assembled next month to oversee the transition.',
-        explanation: '"A cross-functional team will be assembled next month..." (Januari = mulai berlakunya ekspansi.)',
+        explanation:
+          '"A cross-functional team will be assembled next month..." (Januari = mulai berlakunya ekspansi.)',
       },
     ],
   },
@@ -833,15 +985,26 @@ const MAHIR_LESSONS: DemoLesson[] = [
       {
         type: 'PILIHAN_GANDA',
         prompt: 'What is the main topic of the briefing?',
-        options: ['A staff party', 'Quarterly results and strategy', 'A new office', 'Hiring plans'],
+        options: [
+          'A staff party',
+          'Quarterly results and strategy',
+          'A new office',
+          'Hiring plans',
+        ],
         answerKey: 'B',
         tts: 'This morning we will review the quarterly results and discuss our strategy for the coming year.',
-        explanation: '"...review the quarterly results and discuss our strategy."',
+        explanation:
+          '"...review the quarterly results and discuss our strategy."',
       },
       {
         type: 'PILIHAN_GANDA',
         prompt: 'What caused the delay?',
-        options: ['Budget cuts', 'Staff shortage', 'Supply chain issues', 'Software bugs'],
+        options: [
+          'Budget cuts',
+          'Staff shortage',
+          'Supply chain issues',
+          'Software bugs',
+        ],
         answerKey: 'C',
         tts: 'The product launch was delayed due to unexpected supply chain issues.',
         explanation: '"...due to unexpected supply chain issues."',
@@ -857,7 +1020,12 @@ const MAHIR_LESSONS: DemoLesson[] = [
       {
         type: 'PILIHAN_GANDA',
         prompt: 'What does the speaker recommend?',
-        options: ['A hiring freeze', 'Investing in employee training', 'Reducing salaries', 'Outsourcing support'],
+        options: [
+          'A hiring freeze',
+          'Investing in employee training',
+          'Reducing salaries',
+          'Outsourcing support',
+        ],
         answerKey: 'B',
         tts: 'I recommend investing more in employee training to reduce turnover.',
         explanation: '"I recommend investing more in employee training..."',
@@ -865,7 +1033,12 @@ const MAHIR_LESSONS: DemoLesson[] = [
       {
         type: 'PILIHAN_GANDA',
         prompt: 'When will the merger be announced?',
-        options: ['Next week', 'At the end of the fiscal year', 'Tomorrow morning', 'In two years'],
+        options: [
+          'Next week',
+          'At the end of the fiscal year',
+          'Tomorrow morning',
+          'In two years',
+        ],
         answerKey: 'B',
         tts: 'The merger will be announced officially at the end of the fiscal year.',
         explanation: '"...at the end of the fiscal year."',
@@ -881,7 +1054,12 @@ const MAHIR_LESSONS: DemoLesson[] = [
       {
         type: 'PILIHAN_GANDA',
         prompt: 'What is the purpose of the call?',
-        options: ['To cancel a contract', 'To follow up on a proposal', 'To schedule an interview', 'To request a refund'],
+        options: [
+          'To cancel a contract',
+          'To follow up on a proposal',
+          'To schedule an interview',
+          'To request a refund',
+        ],
         answerKey: 'B',
         tts: 'I am calling to follow up on the proposal we sent last week.',
         explanation: '"...to follow up on the proposal."',
@@ -889,7 +1067,12 @@ const MAHIR_LESSONS: DemoLesson[] = [
       {
         type: 'PILIHAN_GANDA',
         prompt: 'What should attendees do before the workshop?',
-        options: ['Prepare a presentation', 'Bring their laptops', 'Read the case study', 'Sign a form'],
+        options: [
+          'Prepare a presentation',
+          'Bring their laptops',
+          'Read the case study',
+          'Sign a form',
+        ],
         answerKey: 'C',
         tts: 'Please read the case study before attending the workshop.',
         explanation: '"Please read the case study before attending..."',
@@ -898,21 +1081,28 @@ const MAHIR_LESSONS: DemoLesson[] = [
   },
 ];
 
-const MODULES: DemoModule[] = [
-  { topic: 'Daily Conversation', level: 'DASAR', cefr: 'A2', lessons: DASAR_LESSONS },
-  { topic: 'Workplace Communication', level: 'MENENGAH', cefr: 'B1', lessons: MENENGAH_LESSONS },
-  { topic: 'Professional English', level: 'MAHIR', cefr: 'C1', lessons: MAHIR_LESSONS },
+export const MODULES: DemoModule[] = [
+  {
+    topic: 'Daily Conversation',
+    level: 'DASAR',
+    cefr: 'A2',
+    lessons: DASAR_LESSONS,
+  },
+  {
+    topic: 'Workplace Communication',
+    level: 'MENENGAH',
+    cefr: 'B1',
+    lessons: MENENGAH_LESSONS,
+  },
+  {
+    topic: 'Professional English',
+    level: 'MAHIR',
+    cefr: 'C1',
+    lessons: MAHIR_LESSONS,
+  },
 ];
 
 async function main() {
-  const useTts = hasMacTts();
-  const store = makeAudioStore();
-  if (!useTts) {
-    console.warn(
-      `⚠ TTS macOS (say/afconvert) tidak tersedia — memakai .m4a yang sudah ada di ${store.label}; sisanya WAV senyap.`,
-    );
-  }
-
   for (const mod of MODULES) {
     // urutan lesson: lanjut dari max(order) level modul ini (pola importer)
     const maxOrder = await prisma.lesson.aggregate({
@@ -924,14 +1114,22 @@ async function main() {
     let lessonsUpserted = 0;
     let itemsUpserted = 0;
     let audioFiles = 0;
-    let audioSilent = 0;
 
     for (const dl of mod.lessons) {
-      const existing = await prisma.lesson.findUnique({ where: { code: dl.code } });
+      const existing = await prisma.lesson.findUnique({
+        where: { code: dl.code },
+      });
       const lesson = existing
         ? await prisma.lesson.update({
             where: { id: existing.id },
-            data: { title: dl.title, topic: mod.topic, level: mod.level, cefr: mod.cefr, skill: dl.skill, status: 'LIVE' },
+            data: {
+              title: dl.title,
+              topic: mod.topic,
+              level: mod.level,
+              cefr: mod.cefr,
+              skill: dl.skill,
+              status: 'LIVE',
+            },
           })
         : await prisma.lesson.create({
             data: {
@@ -949,20 +1147,16 @@ async function main() {
 
       for (let i = 0; i < dl.items.length; i++) {
         const it = dl.items[i];
-        let mediaFile: string | null = null;
-        if (it.tts) {
-          mediaFile = await makeAudio(
-            `${dl.code.toLowerCase()}-${String(i + 1).padStart(2, '0')}`,
-            it.tts,
-            useTts,
-            store,
-          );
-          audioFiles++;
-          if (mediaFile.endsWith('.wav')) audioSilent++;
-        }
+        if (it.tts) audioFiles++;
         const acceptedAnswers =
           it.type === 'ISIAN'
-            ? Array.from(new Set([it.answerKey, ...(it.acceptedAnswers ?? [])].map((a) => a.trim())))
+            ? Array.from(
+                new Set(
+                  [it.answerKey, ...(it.acceptedAnswers ?? [])].map((a) =>
+                    a.trim(),
+                  ),
+                ),
+              )
             : [];
         const data = {
           type: it.type,
@@ -971,7 +1165,8 @@ async function main() {
           answerKey: it.answerKey,
           acceptedAnswers,
           explanation: it.explanation,
-          mediaFile,
+          mediaFile: null,
+          ttsText: it.tts ?? null,
           passage: it.passage ?? null,
           status: 'LIVE' as const,
         };
@@ -984,20 +1179,18 @@ async function main() {
       }
     }
 
-    const audioNote =
-      audioSilent === 0
-        ? 'm4a'
-        : `${audioFiles - audioSilent} m4a + ${audioSilent} wav senyap`;
     console.log(
-      `✔ Demo module "${mod.topic}" (${mod.level}/${mod.cefr}): ${lessonsUpserted} lesson, ${itemsUpserted} soal, ${audioFiles} audio (${audioNote}) — semua LIVE.`,
+      `✔ Demo module "${mod.topic}" (${mod.level}/${mod.cefr}): ${lessonsUpserted} lesson, ${itemsUpserted} soal, ${audioFiles} audio TTS — semua LIVE.`,
     );
   }
   console.log('  Ganti level di Profil untuk melihat modul level lain.');
 }
 
-main()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  })
-  .finally(() => prisma.$disconnect());
+// Dijalankan hanya bila dipanggil langsung — definisi diimpor seed-tts-entries.
+if (require.main === module)
+  main()
+    .catch((e) => {
+      console.error(e);
+      process.exit(1);
+    })
+    .finally(() => prisma.$disconnect());

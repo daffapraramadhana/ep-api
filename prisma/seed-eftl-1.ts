@@ -24,10 +24,11 @@ const ON_THE_BUS = `On the bus, Dedi, a new tour leader, sits next to Ms. Clark.
 
 Ms. Clark smiles politely but does not answer. She looks out of the window for the rest of the trip.`;
 
-const def: KitModule = {
+export const def: KitModule = {
   slug: 'eftl-1-greetings-small-talk',
   title: 'Greetings & Small Talk',
-  summary: 'Menyapa tamu tur dengan tepat dan membuka obrolan ringan yang nyaman.',
+  summary:
+    'Menyapa tamu tur dengan tepat dan membuka obrolan ringan yang nyaman.',
   topic: 'Greetings & Small Talk',
   level: 'DASAR',
   cefr: 'A2',
@@ -66,9 +67,15 @@ Kamu (Tour Leader): It's a pleasure to meet you all today.
         {
           type: 'PILIHAN_GANDA',
           prompt: 'Which greeting is formal?',
-          options: ['Yo, everyone!', 'Good morning, ladies and gentlemen.', "What's up, guys?", 'Hiya!'],
+          options: [
+            'Yo, everyone!',
+            'Good morning, ladies and gentlemen.',
+            "What's up, guys?",
+            'Hiya!',
+          ],
           answerKey: 'B',
-          explanation: '"Good morning, ladies and gentlemen." = salam formal untuk menyambut grup tamu.',
+          explanation:
+            '"Good morning, ladies and gentlemen." = salam formal untuk menyambut grup tamu.',
         },
         {
           type: 'PILIHAN_GANDA',
@@ -80,7 +87,8 @@ Kamu (Tour Leader): It's a pleasure to meet you all today.
             'Silakan duduk semuanya',
           ],
           answerKey: 'B',
-          explanation: '"A very warm welcome to all of you" = sambutan yang sangat hangat untuk Anda sekalian.',
+          explanation:
+            '"A very warm welcome to all of you" = sambutan yang sangat hangat untuk Anda sekalian.',
         },
         {
           type: 'ISIAN',
@@ -92,17 +100,20 @@ Kamu (Tour Leader): It's a pleasure to meet you all today.
           type: 'ISIAN',
           prompt: "It's a ___ to meet you all today.",
           answerKey: 'pleasure',
-          explanation: '"It\'s a pleasure to meet you" = senang sekali bertemu dengan Anda.',
+          explanation:
+            '"It\'s a pleasure to meet you" = senang sekali bertemu dengan Anda.',
         },
         {
           type: 'SUSUN_KALIMAT',
           prompt: SUSUN,
           answerKey: 'A very warm welcome to all of you',
-          explanation: '"A very warm welcome to all of you." = Sambutan yang sangat hangat untuk Anda sekalian.',
+          explanation:
+            '"A very warm welcome to all of you." = Sambutan yang sangat hangat untuk Anda sekalian.',
         },
         {
           type: 'PILIHAN_GANDA',
-          prompt: 'It is 9 a.m. You are welcoming your tour group in the hotel lobby. What do you say?',
+          prompt:
+            'It is 9 a.m. You are welcoming your tour group in the hotel lobby. What do you say?',
           options: [
             'Good night, everyone.',
             'Good morning, ladies and gentlemen.',
@@ -110,13 +121,15 @@ Kamu (Tour Leader): It's a pleasure to meet you all today.
             'Good evening, ladies and gentlemen.',
           ],
           answerKey: 'B',
-          explanation: 'Pukul 9 pagi + menyambut grup tamu → salam formal "Good morning, ladies and gentlemen."',
+          explanation:
+            'Pukul 9 pagi + menyambut grup tamu → salam formal "Good morning, ladies and gentlemen."',
         },
         {
           type: 'SUSUN_KALIMAT',
           prompt: SUSUN,
           answerKey: "It's a pleasure to meet you all today",
-          explanation: '"It\'s a pleasure to meet you all today." = Senang sekali bisa bertemu dengan Anda semua hari ini.',
+          explanation:
+            '"It\'s a pleasure to meet you all today." = Senang sekali bisa bertemu dengan Anda semua hari ini.',
         },
         {
           type: 'ISIAN',
@@ -162,7 +175,12 @@ Kamu (Tour Leader): It's a pleasure to meet you all today.
         {
           type: 'PILIHAN_GANDA',
           prompt: '"Morning!" is a short, casual way to say…',
-          options: ['Good morning', 'Good night', 'More, please', 'Good afternoon'],
+          options: [
+            'Good morning',
+            'Good night',
+            'More, please',
+            'Good afternoon',
+          ],
           answerKey: 'A',
           explanation: '"Morning!" = versi santai dari "Good morning".',
         },
@@ -175,14 +193,22 @@ Kamu (Tour Leader): It's a pleasure to meet you all today.
         },
         {
           type: 'PILIHAN_GANDA',
-          prompt: 'Which greeting is best for welcoming tour guests in a friendly way?',
-          options: ['Sup, guys?', 'Yo!', 'Hello everyone, welcome to Bali!', 'Alright, pal?'],
+          prompt:
+            'Which greeting is best for welcoming tour guests in a friendly way?',
+          options: [
+            'Sup, guys?',
+            'Yo!',
+            'Hello everyone, welcome to Bali!',
+            'Alright, pal?',
+          ],
           answerKey: 'C',
-          explanation: 'Dengan tamu, pakai semi-formal: ramah tapi sopan — "Hello everyone, welcome to Bali!"',
+          explanation:
+            'Dengan tamu, pakai semi-formal: ramah tapi sopan — "Hello everyone, welcome to Bali!"',
         },
         {
           type: 'PILIHAN_GANDA',
-          prompt: 'Which greeting would you use with a close friend from your team?',
+          prompt:
+            'Which greeting would you use with a close friend from your team?',
           options: [
             'Good evening, ladies and gentlemen.',
             'Hey, buddy!',
@@ -196,26 +222,35 @@ Kamu (Tour Leader): It's a pleasure to meet you all today.
           type: 'ISIAN',
           prompt: 'Hi there! How are you ___ today?',
           answerKey: 'doing',
-          explanation: '"How are you doing today?" = Bagaimana kabar Anda hari ini?',
+          explanation:
+            '"How are you doing today?" = Bagaimana kabar Anda hari ini?',
         },
         {
           type: 'ISIAN',
           prompt: 'Good to see you all ___ for our tour!',
           answerKey: 'ready',
-          explanation: '"Good to see you all ready for our tour!" = Senang melihat Anda semua siap untuk tur kita!',
+          explanation:
+            '"Good to see you all ready for our tour!" = Senang melihat Anda semua siap untuk tur kita!',
         },
         {
           type: 'SUSUN_KALIMAT',
           prompt: SUSUN,
           answerKey: 'Hello everyone welcome to Bali',
-          explanation: '"Hello everyone, welcome to Bali!" = Halo semuanya, selamat datang di Bali!',
+          explanation:
+            '"Hello everyone, welcome to Bali!" = Halo semuanya, selamat datang di Bali!',
         },
         {
           type: 'PILIHAN_GANDA',
           prompt: 'What does "How have you been?" mean?',
-          options: ['Kamu dari mana?', 'Apa kabar selama ini?', 'Sudah berapa lama di sini?', 'Kamu mau ke mana?'],
+          options: [
+            'Kamu dari mana?',
+            'Apa kabar selama ini?',
+            'Sudah berapa lama di sini?',
+            'Kamu mau ke mana?',
+          ],
           answerKey: 'B',
-          explanation: '"How have you been?" = Apa kabar selama ini? — untuk orang yang sudah lama tidak bertemu.',
+          explanation:
+            '"How have you been?" = Apa kabar selama ini? — untuk orang yang sudah lama tidak bertemu.',
         },
       ],
     },
@@ -251,29 +286,54 @@ Mrs. Smith (Tamu): Good evening! Everything looks delicious.
       items: [
         {
           type: 'PILIHAN_GANDA',
-          prompt: 'It is 9 a.m. You meet your group in the hotel lobby. What do you say?',
-          options: ['Good evening', 'Good morning', 'Good afternoon', 'Good night'],
+          prompt:
+            'It is 9 a.m. You meet your group in the hotel lobby. What do you say?',
+          options: [
+            'Good evening',
+            'Good morning',
+            'Good afternoon',
+            'Good night',
+          ],
           answerKey: 'B',
           explanation: '"Good morning" dipakai sampai pukul 12.00 siang.',
         },
         {
           type: 'PILIHAN_GANDA',
           prompt: 'It is 2 p.m. at the museum. What do you say?',
-          options: ['Good morning', 'Good night', 'Good afternoon', 'Good evening'],
+          options: [
+            'Good morning',
+            'Good night',
+            'Good afternoon',
+            'Good evening',
+          ],
           answerKey: 'C',
-          explanation: '"Good afternoon" dipakai dari pukul 12.00 sampai sekitar 17.00/18.00.',
+          explanation:
+            '"Good afternoon" dipakai dari pukul 12.00 sampai sekitar 17.00/18.00.',
         },
         {
           type: 'PILIHAN_GANDA',
-          prompt: 'It is 7 p.m. You arrive at dinner with your guests. What do you say?',
-          options: ['Good night', 'Good evening', 'Good afternoon', 'Good morning'],
+          prompt:
+            'It is 7 p.m. You arrive at dinner with your guests. What do you say?',
+          options: [
+            'Good night',
+            'Good evening',
+            'Good afternoon',
+            'Good morning',
+          ],
           answerKey: 'B',
-          explanation: 'Baru bertemu di malam hari dan acara masih berlanjut → "Good evening".',
+          explanation:
+            'Baru bertemu di malam hari dan acara masih berlanjut → "Good evening".',
         },
         {
           type: 'PILIHAN_GANDA',
-          prompt: 'It is 11 p.m. Your guests are going back to their rooms to sleep. What do you say?',
-          options: ['Good evening!', 'Good afternoon!', 'Good night!', 'Good morning!'],
+          prompt:
+            'It is 11 p.m. Your guests are going back to their rooms to sleep. What do you say?',
+          options: [
+            'Good evening!',
+            'Good afternoon!',
+            'Good night!',
+            'Good morning!',
+          ],
           answerKey: 'C',
           explanation: 'Berpamitan sebelum tidur → "Good night!"',
         },
@@ -287,7 +347,8 @@ Mrs. Smith (Tamu): Good evening! Everything looks delicious.
             'to start a tour',
           ],
           answerKey: 'B',
-          explanation: '"Good night" = salam penutup/berpamitan, bukan salam pembuka.',
+          explanation:
+            '"Good night" = salam penutup/berpamitan, bukan salam pembuka.',
         },
         {
           type: 'ISIAN',
@@ -297,7 +358,8 @@ Mrs. Smith (Tamu): Good evening! Everything looks delicious.
         },
         {
           type: 'ISIAN',
-          prompt: 'It is 8 p.m. The tour group arrives at the restaurant. "Good ___, everyone!"',
+          prompt:
+            'It is 8 p.m. The tour group arrives at the restaurant. "Good ___, everyone!"',
           answerKey: 'evening',
           explanation: 'Pukul 8 malam, baru tiba → "Good evening".',
         },
@@ -305,7 +367,8 @@ Mrs. Smith (Tamu): Good evening! Everything looks delicious.
           type: 'SUSUN_KALIMAT',
           prompt: SUSUN,
           answerKey: 'See you at breakfast tomorrow',
-          explanation: '"Good night, everyone. See you at breakfast tomorrow!" = penutup yang ramah di akhir malam.',
+          explanation:
+            '"Good night, everyone. See you at breakfast tomorrow!" = penutup yang ramah di akhir malam.',
         },
       ],
     },
@@ -346,23 +409,40 @@ Pertanyaan terbuka (*How…? What…?*) membuat tamu bercerita lebih banyak dari
         {
           type: 'PILIHAN_GANDA',
           prompt: 'Where is Rina waiting with her group?',
-          options: ['At the hotel', 'At the airport', 'On the bus', 'At a restaurant'],
+          options: [
+            'At the hotel',
+            'At the airport',
+            'On the bus',
+            'At a restaurant',
+          ],
           answerKey: 'B',
           passage: AIRPORT,
-          explanation: '"She is waiting with her group at the airport in Yogyakarta."',
+          explanation:
+            '"She is waiting with her group at the airport in Yogyakarta."',
         },
         {
           type: 'PILIHAN_GANDA',
           prompt: "What is Rina's first small talk question?",
-          options: ['Are you married?', 'How was your flight here?', 'How old are you?', 'What is your job?'],
+          options: [
+            'Are you married?',
+            'How was your flight here?',
+            'How old are you?',
+            'What is your job?',
+          ],
           answerKey: 'B',
           passage: AIRPORT,
-          explanation: 'Rina membuka dengan topik aman: perjalanan — "How was your flight here?"',
+          explanation:
+            'Rina membuka dengan topik aman: perjalanan — "How was your flight here?"',
         },
         {
           type: 'PILIHAN_GANDA',
           prompt: 'What is Mrs. Brown excited about?',
-          options: ['Trying the local food', 'Going home', 'Watching a movie', 'Buying souvenirs'],
+          options: [
+            'Trying the local food',
+            'Going home',
+            'Watching a movie',
+            'Buying souvenirs',
+          ],
           answerKey: 'A',
           passage: AIRPORT,
           explanation: '"…she is excited to try the local food."',
@@ -377,32 +457,42 @@ Pertanyaan terbuka (*How…? What…?*) membuat tamu bercerita lebih banyak dari
             'To sell something',
           ],
           answerKey: 'B',
-          explanation: 'Small talk = mencairkan suasana, menjalin hubungan baik, mengisi keheningan.',
+          explanation:
+            'Small talk = mencairkan suasana, menjalin hubungan baik, mengisi keheningan.',
         },
         {
           type: 'PILIHAN_GANDA',
           prompt: 'Which is a safe small talk topic with a new guest?',
-          options: ['Their salary', 'Their religion', 'The weather', 'Their weight'],
+          options: [
+            'Their salary',
+            'Their religion',
+            'The weather',
+            'Their weight',
+          ],
           answerKey: 'C',
-          explanation: 'Cuaca adalah topik paling aman — tidak pribadi dan tidak kontroversial.',
+          explanation:
+            'Cuaca adalah topik paling aman — tidak pribadi dan tidak kontroversial.',
         },
         {
           type: 'ISIAN',
           prompt: 'Is this your first ___ visiting Indonesia?',
           answerKey: 'time',
-          explanation: '"Is this your first time visiting…?" = Apakah ini pertama kalinya Anda mengunjungi…?',
+          explanation:
+            '"Is this your first time visiting…?" = Apakah ini pertama kalinya Anda mengunjungi…?',
         },
         {
           type: 'ISIAN',
           prompt: 'Have you had a ___ to try any local food yet?',
           answerKey: 'chance',
-          explanation: '"Have you had a chance to…?" = Apakah Anda sudah sempat…?',
+          explanation:
+            '"Have you had a chance to…?" = Apakah Anda sudah sempat…?',
         },
         {
           type: 'SUSUN_KALIMAT',
           prompt: SUSUN,
           answerKey: 'How was your flight here',
-          explanation: '"How was your flight here?" = Bagaimana penerbangan Anda ke sini?',
+          explanation:
+            '"How was your flight here?" = Bagaimana penerbangan Anda ke sini?',
         },
       ],
     },
@@ -436,9 +526,15 @@ Kamu (Tour Leader): That's lovely! Is this their first time in Indonesia?
         {
           type: 'PILIHAN_GANDA',
           prompt: 'Which question should a tour leader avoid?',
-          options: ['How was your flight?', 'Are you married?', 'Have you tried the local food?', 'Do you have any pets?'],
+          options: [
+            'How was your flight?',
+            'Are you married?',
+            'Have you tried the local food?',
+            'Do you have any pets?',
+          ],
           answerKey: 'B',
-          explanation: 'Status pernikahan & keluarga = urusan pribadi; jangan memulai pertanyaan ini.',
+          explanation:
+            'Status pernikahan & keluarga = urusan pribadi; jangan memulai pertanyaan ini.',
         },
         {
           type: 'PILIHAN_GANDA',
@@ -450,18 +546,26 @@ Kamu (Tour Leader): That's lovely! Is this their first time in Indonesia?
             'Guests cannot answer it',
           ],
           answerKey: 'B',
-          explanation: 'Menanyakan usia sering dianggap tidak sopan atau terlalu ingin tahu.',
+          explanation:
+            'Menanyakan usia sering dianggap tidak sopan atau terlalu ingin tahu.',
         },
         {
           type: 'PILIHAN_GANDA',
           prompt: 'Which question is about private finances?',
-          options: ['How much is your salary?', 'Do you like hiking?', 'How was the trip?', 'Is it your first visit?'],
+          options: [
+            'How much is your salary?',
+            'Do you like hiking?',
+            'How was the trip?',
+            'Is it your first visit?',
+          ],
           answerKey: 'A',
-          explanation: 'Gaji, kepemilikan rumah, dan keuangan melanggar batas pribadi.',
+          explanation:
+            'Gaji, kepemilikan rumah, dan keuangan melanggar batas pribadi.',
         },
         {
           type: 'PILIHAN_GANDA',
-          prompt: 'A guest looks tired after a long flight. Which is the best thing to say?',
+          prompt:
+            'A guest looks tired after a long flight. Which is the best thing to say?',
           options: [
             'How much do you weigh?',
             "Why aren't you married yet?",
@@ -469,14 +573,16 @@ Kamu (Tour Leader): That's lovely! Is this their first time in Indonesia?
             'What is your religion?',
           ],
           answerKey: 'C',
-          explanation: 'Tunjukkan perhatian tanpa masuk ke urusan pribadi: "Hope the jet lag isn\'t hitting you too hard!"',
+          explanation:
+            'Tunjukkan perhatian tanpa masuk ke urusan pribadi: "Hope the jet lag isn\'t hitting you too hard!"',
         },
         {
           type: 'PILIHAN_GANDA',
           prompt: 'Which topic is safe for small talk?',
           options: ['Religion', 'Salary', 'Age', 'Hobbies'],
           answerKey: 'D',
-          explanation: 'Hobi adalah topik ringan dan aman: "What do you like to do in your free time?"',
+          explanation:
+            'Hobi adalah topik ringan dan aman: "What do you like to do in your free time?"',
         },
         {
           type: 'PILIHAN_GANDA',
@@ -489,7 +595,8 @@ Kamu (Tour Leader): That's lovely! Is this their first time in Indonesia?
           ],
           answerKey: 'B',
           passage: ON_THE_BUS,
-          explanation: 'Dedi menanyakan usia dan status pernikahan — dua topik pribadi yang sebaiknya dihindari.',
+          explanation:
+            'Dedi menanyakan usia dan status pernikahan — dua topik pribadi yang sebaiknya dihindari.',
         },
         {
           type: 'PILIHAN_GANDA',
@@ -502,13 +609,16 @@ Kamu (Tour Leader): That's lovely! Is this their first time in Indonesia?
           ],
           answerKey: 'C',
           passage: ON_THE_BUS,
-          explanation: 'Kesan pertama tentang Indonesia adalah topik aman untuk membuka obrolan.',
+          explanation:
+            'Kesan pertama tentang Indonesia adalah topik aman untuk membuka obrolan.',
         },
         {
           type: 'ISIAN',
-          prompt: 'Lengkapi pertanyaan yang sebaiknya DIHINDARI: "How much is your ___?" (gaji)',
+          prompt:
+            'Lengkapi pertanyaan yang sebaiknya DIHINDARI: "How much is your ___?" (gaji)',
           answerKey: 'salary',
-          explanation: '"Salary" = gaji. Pertanyaan soal gaji melanggar batas pribadi.',
+          explanation:
+            '"Salary" = gaji. Pertanyaan soal gaji melanggar batas pribadi.',
         },
       ],
     },
@@ -548,23 +658,43 @@ Mr. Garcia (Tamu): So far, so good! The hotel is lovely.
         {
           type: 'PILIHAN_GANDA',
           prompt: 'What does "break the ice" mean?',
-          options: ['Memecahkan es batu', 'Mencairkan suasana', 'Membatalkan acara', 'Mendinginkan minuman'],
+          options: [
+            'Memecahkan es batu',
+            'Mencairkan suasana',
+            'Membatalkan acara',
+            'Mendinginkan minuman',
+          ],
           answerKey: 'B',
-          explanation: '"Break the ice" = mencairkan suasana, memulai obrolan supaya tidak kaku.',
+          explanation:
+            '"Break the ice" = mencairkan suasana, memulai obrolan supaya tidak kaku.',
         },
         {
           type: 'PILIHAN_GANDA',
-          prompt: '"We hope our itinerary today will be smooth sailing." This means the trip will…',
-          options: ['go well without problems', 'be on a boat', 'be cancelled', 'be very slow'],
+          prompt:
+            '"We hope our itinerary today will be smooth sailing." This means the trip will…',
+          options: [
+            'go well without problems',
+            'be on a boat',
+            'be cancelled',
+            'be very slow',
+          ],
           answerKey: 'A',
-          explanation: '"Smooth sailing" = berjalan lancar tanpa kendala — bukan soal kapal.',
+          explanation:
+            '"Smooth sailing" = berjalan lancar tanpa kendala — bukan soal kapal.',
         },
         {
           type: 'PILIHAN_GANDA',
-          prompt: 'Your manager calls and asks, "How is the trip so far?" Everything is fine. What do you say?',
-          options: ['Break the ice!', 'So far, so good!', 'Good night!', "Don't hesitate!"],
+          prompt:
+            'Your manager calls and asks, "How is the trip so far?" Everything is fine. What do you say?',
+          options: [
+            'Break the ice!',
+            'So far, so good!',
+            'Good night!',
+            "Don't hesitate!",
+          ],
           answerKey: 'B',
-          explanation: '"So far, so good!" = sejauh ini semuanya baik-baik saja.',
+          explanation:
+            '"So far, so good!" = sejauh ini semuanya baik-baik saja.',
         },
         {
           type: 'ISIAN',
@@ -582,17 +712,20 @@ Mr. Garcia (Tamu): So far, so good! The hotel is lovely.
           type: 'ISIAN',
           prompt: "Hope the jet ___ isn't hitting you too hard!",
           answerKey: 'lag',
-          explanation: '"Jet lag" = lelah karena perbedaan zona waktu setelah terbang jauh.',
+          explanation:
+            '"Jet lag" = lelah karena perbedaan zona waktu setelah terbang jauh.',
         },
         {
           type: 'SUSUN_KALIMAT',
           prompt: SUSUN,
           answerKey: 'Did you manage to get some rest on the way',
-          explanation: '"Did you manage to get some rest on the way?" = Apakah Anda sempat beristirahat selama di perjalanan?',
+          explanation:
+            '"Did you manage to get some rest on the way?" = Apakah Anda sempat beristirahat selama di perjalanan?',
         },
         {
           type: 'PILIHAN_GANDA',
-          prompt: 'What does "Please don\'t hesitate to ask if you need anything" mean?',
+          prompt:
+            'What does "Please don\'t hesitate to ask if you need anything" mean?',
           options: [
             'Mohon jangan bertanya selama perjalanan',
             'Jangan ragu untuk bertanya jika Anda membutuhkan sesuatu',
@@ -600,7 +733,8 @@ Mr. Garcia (Tamu): So far, so good! The hotel is lovely.
             'Apakah Anda membutuhkan sesuatu?',
           ],
           answerKey: 'B',
-          explanation: 'Kalimat ini menawarkan bantuan dengan ramah — bagus untuk menutup sambutan.',
+          explanation:
+            'Kalimat ini menawarkan bantuan dengan ramah — bagus untuk menutup sambutan.',
         },
       ],
     },
@@ -666,18 +800,21 @@ Cuaca adalah topik small talk paling aman: *"It's a bit cloudy today, but the fo
           prompt: 'What does "itinerary" mean?',
           options: ['Rencana perjalanan', 'Bagasi', 'Oleh-oleh', 'Paspor'],
           answerKey: 'A',
-          explanation: '"Itinerary" = rencana perjalanan — daftar tempat dan jadwal tur.',
+          explanation:
+            '"Itinerary" = rencana perjalanan — daftar tempat dan jadwal tur.',
         },
         {
           type: 'PILIHAN_GANDA',
           prompt: 'Which word means "hidangan penutup"?',
           options: ['Appetizer', 'Main course', 'Dessert', 'Beverage'],
           answerKey: 'C',
-          explanation: '"Dessert" = hidangan penutup, misalnya es krim atau kue.',
+          explanation:
+            '"Dessert" = hidangan penutup, misalnya es krim atau kue.',
         },
         {
           type: 'ISIAN',
-          prompt: "Please keep your ___ with you. Don't leave your bags on the bus.",
+          prompt:
+            "Please keep your ___ with you. Don't leave your bags on the bus.",
           answerKey: 'luggage',
           acceptedAnswers: ['baggage'],
           explanation: '"Luggage" / "baggage" = bagasi, tas bawaan.',
@@ -690,7 +827,8 @@ Cuaca adalah topik small talk paling aman: *"It's a bit cloudy today, but the fo
         },
         {
           type: 'PILIHAN_GANDA',
-          prompt: 'Dinner is finished. You ask the waiter: "Excuse me, can we have the ___, please?"',
+          prompt:
+            'Dinner is finished. You ask the waiter: "Excuse me, can we have the ___, please?"',
           options: ['menu', 'bill', 'recipe', 'dessert'],
           answerKey: 'B',
           explanation: '"Bill" = tagihan. "Can we have the bill, please?"',
@@ -706,13 +844,15 @@ Cuaca adalah topik small talk paling aman: *"It's a bit cloudy today, but the fo
           prompt: 'What does "humidity" mean?',
           options: ['Suhu', 'Kelembapan', 'Prakiraan cuaca', 'Berawan'],
           answerKey: 'B',
-          explanation: '"Humidity" = kelembapan udara. Indonesia terkenal "hot and humid".',
+          explanation:
+            '"Humidity" = kelembapan udara. Indonesia terkenal "hot and humid".',
         },
         {
           type: 'SUSUN_KALIMAT',
           prompt: SUSUN,
           answerKey: 'The forecast says it will be sunny',
-          explanation: '"The forecast says it will be sunny." = Prakiraan cuaca bilang akan cerah.',
+          explanation:
+            '"The forecast says it will be sunny." = Prakiraan cuaca bilang akan cerah.',
         },
       ],
     },
@@ -779,16 +919,23 @@ Berita ringan boleh jadi bahan obrolan, tapi hindari berdebat soal politik atau 
         {
           type: 'PILIHAN_GANDA',
           prompt: 'What does "spoiler" mean?',
-          options: ['Bocoran cerita', 'Lagu tema', 'Penayangan perdana', 'Ulasan'],
+          options: [
+            'Bocoran cerita',
+            'Lagu tema',
+            'Penayangan perdana',
+            'Ulasan',
+          ],
           answerKey: 'A',
-          explanation: '"Spoiler" = bocoran cerita. "No spoilers, please!" = jangan bocorkan akhirnya!',
+          explanation:
+            '"Spoiler" = bocoran cerita. "No spoilers, please!" = jangan bocorkan akhirnya!',
         },
         {
           type: 'PILIHAN_GANDA',
           prompt: 'Which word means "berita terkini"?',
           options: ['Headline', 'Breaking news', 'Review', 'Announcement'],
           answerKey: 'B',
-          explanation: '"Breaking news" = berita terkini yang baru saja terjadi.',
+          explanation:
+            '"Breaking news" = berita terkini yang baru saja terjadi.',
         },
         {
           type: 'ISIAN',
@@ -799,7 +946,8 @@ Berita ringan boleh jadi bahan obrolan, tapi hindari berdebat soal politik atau 
         },
         {
           type: 'ISIAN',
-          prompt: "My dog is sick, so I'm taking him to the ___. (dokter hewan)",
+          prompt:
+            "My dog is sick, so I'm taking him to the ___. (dokter hewan)",
           answerKey: 'vet',
           explanation: '"Vet" = dokter hewan (singkatan veterinarian).',
         },
@@ -819,10 +967,12 @@ Berita ringan boleh jadi bahan obrolan, tapi hindari berdebat soal politik atau 
         },
         {
           type: 'ISIAN',
-          prompt: "The episode ended with a ___. I can't wait for the next one! (akhir yang menggantung)",
+          prompt:
+            "The episode ended with a ___. I can't wait for the next one! (akhir yang menggantung)",
           answerKey: 'cliff-hanger',
           acceptedAnswers: ['cliffhanger', 'cliff hanger'],
-          explanation: '"Cliff-hanger" = akhir cerita yang menggantung dan bikin penasaran.',
+          explanation:
+            '"Cliff-hanger" = akhir cerita yang menggantung dan bikin penasaran.',
         },
       ],
     },
@@ -860,7 +1010,8 @@ Di kuis, dengarkan rekaman sambutan Rina lalu jawab pertanyaannya.`,
           options: ['Morning', 'Afternoon', 'Evening', 'Night'],
           answerKey: 'B',
           tts: "Good afternoon, ladies and gentlemen. A very warm welcome to Yogyakarta! My name is Rina, and I'll be your tour leader for the next five days.",
-          explanation: 'Rina membuka dengan "Good afternoon" — siang/sore hari.',
+          explanation:
+            'Rina membuka dengan "Good afternoon" — siang/sore hari.',
         },
         {
           type: 'PILIHAN_GANDA',
@@ -881,7 +1032,8 @@ Di kuis, dengarkan rekaman sambutan Rina lalu jawab pertanyaannya.`,
           ],
           answerKey: 'A',
           tts: "I hope the jet lag isn't hitting you too hard. Did you manage to get some rest on the plane?",
-          explanation: '"Did you manage to get some rest on the plane?" = apakah sempat beristirahat di pesawat.',
+          explanation:
+            '"Did you manage to get some rest on the plane?" = apakah sempat beristirahat di pesawat.',
         },
         {
           type: 'ISIAN',
@@ -893,15 +1045,26 @@ Di kuis, dengarkan rekaman sambutan Rina lalu jawab pertanyaannya.`,
         {
           type: 'PILIHAN_GANDA',
           prompt: 'When will the group arrive at the first stop?',
-          options: ['In ten minutes', 'In thirty minutes', 'In one hour', 'Tomorrow morning'],
+          options: [
+            'In ten minutes',
+            'In thirty minutes',
+            'In one hour',
+            'Tomorrow morning',
+          ],
           answerKey: 'B',
           tts: "Our first stop is the Sultan's Palace. We will arrive in about thirty minutes.",
-          explanation: '"We will arrive in about thirty minutes" = sekitar 30 menit lagi.',
+          explanation:
+            '"We will arrive in about thirty minutes" = sekitar 30 menit lagi.',
         },
         {
           type: 'PILIHAN_GANDA',
           prompt: 'Why does Rina want to play a game?',
-          options: ['To break the ice', 'To win a prize', 'To check passports', 'To wait for dinner'],
+          options: [
+            'To break the ice',
+            'To win a prize',
+            'To check passports',
+            'To wait for dinner',
+          ],
           answerKey: 'A',
           tts: "Let's play a short game to break the ice. Tell the person next to you your name and your favourite food.",
           explanation: '"…to break the ice" = untuk mencairkan suasana.',
@@ -909,10 +1072,16 @@ Di kuis, dengarkan rekaman sambutan Rina lalu jawab pertanyaannya.`,
         {
           type: 'PILIHAN_GANDA',
           prompt: 'What does Rina offer at the end?',
-          options: ['Free drinks', 'Help if the guests need anything', 'A shopping discount', 'A hotel upgrade'],
+          options: [
+            'Free drinks',
+            'Help if the guests need anything',
+            'A shopping discount',
+            'A hotel upgrade',
+          ],
           answerKey: 'B',
           tts: "Please don't hesitate to ask if you need anything. Enjoy the ride!",
-          explanation: '"Please don\'t hesitate to ask if you need anything" = tawaran bantuan.',
+          explanation:
+            '"Please don\'t hesitate to ask if you need anything" = tawaran bantuan.',
         },
       ],
     },
@@ -978,7 +1147,9 @@ Senyum saat menyapa — tamu bisa "mendengar" senyummu lewat nada suara. Beri je
   ],
 };
 
-seedModule(def).catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+// Dijalankan hanya bila dipanggil langsung — definisi diimpor seed-tts-entries.
+if (require.main === module)
+  seedModule(def).catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });

@@ -1,8 +1,14 @@
 // apps/api/prisma/seed-module-kit.ts
 import 'dotenv/config';
-import { Cefr, ItemType, Level, Prisma, PrismaClient, SkillTag } from '@prisma/client';
+import {
+  Cefr,
+  ItemType,
+  Level,
+  Prisma,
+  PrismaClient,
+  SkillTag,
+} from '@prisma/client';
 import { parseChapter } from '../src/modules/chapter-parser';
-import { hasMacTts, makeAudio, makeAudioStore } from './seed-audio';
 
 /**
  * Runner bersama untuk seeder "satu sumber = satu modul" (mis. PDF EFTL 1..5).
@@ -25,7 +31,7 @@ export type KitItem = {
   acceptedAnswers?: string[];
   explanation: string;
   passage?: string;
-  /** teks TTS — bila diisi, file audio dibuat & item.mediaFile menunjuk ke sana */
+  /** teks yang dibacakan suara AI → Item.ttsText (audio Kokoro dibuat server) */
   tts?: string;
 };
 
@@ -61,33 +67,38 @@ function validate(def: KitModule) {
     codes.add(c.code);
     const r = parseChapter(c.body);
     if ('errors' in r)
-      errors.push(...r.errors.map((e) => `${c.code} body baris ${e.line}: ${e.message}`));
-    else if (r.media.length) errors.push(`${c.code}: body seeder tidak boleh memakai media`);
+      errors.push(
+        ...r.errors.map((e) => `${c.code} body baris ${e.line}: ${e.message}`),
+      );
+    else if (r.media.length)
+      errors.push(`${c.code}: body seeder tidak boleh memakai media`);
     c.items.forEach((it, i) => {
       const at = `${c.code} soal ${i + 1}`;
       if (it.type === 'PILIHAN_GANDA') {
         if (it.options?.length !== 4) errors.push(`${at}: butuh tepat 4 opsi`);
-        if (!/^[ABCD]$/.test(it.answerKey)) errors.push(`${at}: answerKey harus A-D`);
-      } else if (it.options) errors.push(`${at}: opsi hanya untuk PILIHAN_GANDA`);
-      if ((it.type === 'SUSUN_KALIMAT' || it.type === 'UCAPAN') && it.answerKey.trim().split(/\s+/).length < 2)
+        if (!/^[ABCD]$/.test(it.answerKey))
+          errors.push(`${at}: answerKey harus A-D`);
+      } else if (it.options)
+        errors.push(`${at}: opsi hanya untuk PILIHAN_GANDA`);
+      if (
+        (it.type === 'SUSUN_KALIMAT' || it.type === 'UCAPAN') &&
+        it.answerKey.trim().split(/\s+/).length < 2
+      )
         errors.push(`${at}: minimal 2 kata`);
       if (it.type === 'SUSUN_KALIMAT' && /[.,!?]/.test(it.answerKey))
         errors.push(`${at}: kunci susun tanpa tanda baca (jadi chip)`);
     });
   }
-  if (errors.length) throw new Error(`Definisi "${def.title}" tidak valid:\n- ${errors.join('\n- ')}`);
+  if (errors.length)
+    throw new Error(
+      `Definisi "${def.title}" tidak valid:\n- ${errors.join('\n- ')}`,
+    );
 }
 
 export async function seedModule(def: KitModule) {
   validate(def);
   const prisma = new PrismaClient();
   try {
-    const useTts = hasMacTts();
-    const store = makeAudioStore();
-    const needsAudio = def.chapters.some((c) => c.items.some((it) => it.tts));
-    if (needsAudio && !useTts)
-      console.warn(`⚠ TTS macOS tidak tersedia — audio memakai file yang ada di ${store.label}; sisanya WAV senyap.`);
-
     // urutan lesson: lanjut dari max(order) level ini (pola importer)
     const maxOrder = await prisma.lesson.aggregate({
       where: { level: def.level },
@@ -129,19 +140,16 @@ export async function seedModule(def: KitModule) {
           itemsSkipped++;
           continue;
         }
-        let mediaFile: string | null = null;
-        if (it.tts) {
-          mediaFile = await makeAudio(
-            `${c.code.toLowerCase()}-${String(order).padStart(2, '0')}`,
-            it.tts,
-            useTts,
-            store,
-          );
-          audioFiles++;
-        }
+        if (it.tts) audioFiles++;
         const acceptedAnswers =
           it.type === 'ISIAN'
-            ? Array.from(new Set([it.answerKey, ...(it.acceptedAnswers ?? [])].map((a) => a.trim())))
+            ? Array.from(
+                new Set(
+                  [it.answerKey, ...(it.acceptedAnswers ?? [])].map((a) =>
+                    a.trim(),
+                  ),
+                ),
+              )
             : [];
         await prisma.item.create({
           data: {
@@ -153,7 +161,7 @@ export async function seedModule(def: KitModule) {
             answerKey: it.answerKey,
             acceptedAnswers,
             explanation: it.explanation,
-            mediaFile,
+            ttsText: it.tts ?? null,
             passage: it.passage ?? null,
             status: def.status,
           },
@@ -191,7 +199,10 @@ export async function seedModule(def: KitModule) {
       const linked = await prisma.moduleChapter.findUnique({
         where: { lessonId: lessonIds.get(c.code)! },
       });
-      if (linked) console.warn(`  ! ${c.code} sudah dipakai bab lain — bab ${order} jadi Bacaan`);
+      if (linked)
+        console.warn(
+          `  ! ${c.code} sudah dipakai bab lain — bab ${order} jadi Bacaan`,
+        );
       const parsed = parseChapter(c.body);
       await prisma.moduleChapter.create({
         data: {
@@ -200,7 +211,9 @@ export async function seedModule(def: KitModule) {
           title: c.title,
           estMinutes: c.estMinutes,
           body: c.body,
-          blocks: (parsed.ok ? parsed.blocks : []) as unknown as Prisma.InputJsonValue,
+          blocks: (parsed.ok
+            ? parsed.blocks
+            : []) as unknown as Prisma.InputJsonValue,
           lessonId: linked ? null : lessonIds.get(c.code)!,
         },
       });

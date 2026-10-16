@@ -159,9 +159,8 @@ Mr. Lee (Tamu): Thank you!
     await prisma.item.deleteMany({ where: { lessonId } });
     await prisma.lesson.deleteMany({ where: { id: lessonId } });
     await prisma.user.deleteMany({ where: { email: { startsWith: 'ttc-' } } });
-    await prisma.ttsClip.deleteMany({
-      where: { segments: { string_contains: String(stamp) } },
-    });
+    // Prisma tak bisa mencari di dalam array JSON → SQL langsung
+    await prisma.$executeRaw`DELETE FROM "TtsClip" WHERE segments::text LIKE ${'%' + String(stamp) + '%'}`;
     await app.close();
   });
 
