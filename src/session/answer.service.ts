@@ -9,18 +9,12 @@ import * as path from 'path';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppConfigService } from '../common/config.service';
-import { addDays, todayWIB } from '../common/wib';
+import { addDays, startOfDayWIBInstant, todayWIB } from '../common/wib';
 import { StorageService } from '../storage/storage.service';
 import { STT_TRANSCRIBER } from '../speech/groq-stt.service';
 import type { SttTranscriber } from '../speech/groq-stt.service';
 import { gradeAnswer } from './grading';
 import { COUNTED_SESSION_KINDS } from '../common/content-scope';
-
-// WIB day boundaries, expressed as real UTC instants (see src/common/wib.ts —
-// todayWIB()/addDays() return the WIB *calendar day* encoded as a UTC
-// midnight placeholder; the real-time instant a WIB day starts is 7h
-// earlier in UTC).
-const H7 = 7 * 3600_000;
 
 /**
  * Task 5 wires the real StreakService (src/me/streak.service.ts) as the
@@ -374,8 +368,9 @@ export class AnswerService {
     tx: Prisma.TransactionClient,
     userId: string,
   ): Promise<number> {
-    const rangeStart = new Date(todayWIB().getTime() - H7);
-    const rangeEnd = new Date(addDays(todayWIB(), 1).getTime() - H7);
+    // answeredAt = timestamp nyata → batas hari WIB sbg instan (lihat wib.ts).
+    const rangeStart = startOfDayWIBInstant(new Date());
+    const rangeEnd = addDays(rangeStart, 1);
     const todaysAttempts = await tx.attempt.findMany({
       where: { userId, answeredAt: { gte: rangeStart, lt: rangeEnd } },
       select: { sessionId: true, itemId: true, xpAwarded: true },

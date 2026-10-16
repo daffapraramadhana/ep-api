@@ -7,7 +7,11 @@ import * as bcrypt from 'bcrypt';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { ELEVENLABS_CLIENT } from '../src/voice-conversation/elevenlabs-client.service';
-import { addDays, todayWIB, weekStartWIB } from '../src/common/wib';
+import {
+  addDays,
+  startOfDayWIBInstant,
+  startOfWeekWIBInstant,
+} from '../src/common/wib';
 
 // Talking agent (ElevenLabs Conversational AI): BE tidak pernah di jalur
 // panggilan — mint signed URL (POST /voice-conversation/start), terima webhook
@@ -180,8 +184,14 @@ describe('Voice Conversation (talking agent)', () => {
       const capdUser = await prisma.user.findUnique({
         where: { email: `vc-capd-${stamp}@x.id` },
       });
+      // 00:01 WIB hari ini — slot 00:00–07:00 WIB dulu lolos dari cap karena
+      // batas hari dibandingkan sbg penanda tanggal (00:00 UTC), bukan instan.
+      const MIN = 60_000;
       await prisma.voiceConversation.create({
-        data: { userId: capdUser!.id },
+        data: {
+          userId: capdUser!.id,
+          createdAt: new Date(startOfDayWIBInstant(new Date()).getTime() + MIN),
+        },
       });
       await request(app.getHttpServer())
         .post('/voice-conversation/start')
@@ -193,14 +203,17 @@ describe('Voice Conversation (talking agent)', () => {
       const weekUser = await prisma.user.findUnique({
         where: { email: `vc-capw-${stamp}@x.id` },
       });
-      const now = todayWIB();
-      const wkStart = weekStartWIB(new Date());
-      // 4 row di minggu ini tapi tidak ada yg hari ini → daily (1) aman,
-      // weekly (4) tercapai.
+      const today = startOfDayWIBInstant(new Date());
+      const wkStart = startOfWeekWIBInstant(new Date());
+      // 4 row di minggu ini (00:01 WIB, slot rawan) tapi tidak ada yg hari ini
+      // → daily (1) aman, weekly (4) tercapai. Hari-hari setelah hari ini
+      // (masa depan) tetap di minggu ini, jadi tidak bocor ke cap harian.
+      const MIN = 60_000;
       const candidates: Date[] = [];
-      for (let i = 1; candidates.length < 4 && i <= 14; i++) {
+      for (let i = 0; i < 7; i++) {
         const d = addDays(wkStart, i);
-        if (d.getTime() !== now.getTime()) candidates.push(d);
+        if (d.getTime() !== today.getTime())
+          candidates.push(new Date(d.getTime() + MIN));
       }
       await prisma.voiceConversation.createMany({
         data: candidates.slice(0, 4).map((createdAt) => ({

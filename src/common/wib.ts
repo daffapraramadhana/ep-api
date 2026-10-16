@@ -15,3 +15,18 @@ export function weekStartWIB(d: Date): Date {
   const dow = (day.getUTCDay() + 6) % 7; // Senin=0
   return addDays(day, -dow);
 }
+
+// dateWIB/todayWIB/weekStartWIB mengembalikan *penanda tanggal* (00:00 UTC
+// dg Y-M-D = hari WIB) — cocok utk kolom @db.Date (Session.date, StreakFreeze),
+// tapi SALAH bila dibandingkan dgn kolom timestamp nyata (createdAt,
+// answeredAt, ...): batasnya jatuh di 07:00 WIB. Untuk timestamp pakai *Instant.
+
+/** Penanda tanggal WIB → momen nyata 00:00 WIB hari itu. */
+export const wibMidnightInstant = (day: Date) => new Date(day.getTime() - H7);
+
+/** Momen nyata 00:00 WIB dari hari WIB yang memuat `d`. */
+export const startOfDayWIBInstant = (d: Date) => wibMidnightInstant(dateWIB(d));
+
+/** Momen nyata Senin 00:00 WIB dari minggu WIB yang memuat `d`. */
+export const startOfWeekWIBInstant = (d: Date) =>
+  wibMidnightInstant(weekStartWIB(d));

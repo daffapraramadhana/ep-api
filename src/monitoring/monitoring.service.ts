@@ -3,7 +3,12 @@ import { Level, SkillTag } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppConfigService } from '../common/config.service';
 import { StreakService } from '../me/streak.service';
-import { addDays, todayWIB, weekStartWIB } from '../common/wib';
+import {
+  addDays,
+  todayWIB,
+  weekStartWIB,
+  wibMidnightInstant,
+} from '../common/wib';
 import {
   DayCount,
   EmployeeStatus,
@@ -24,10 +29,9 @@ const HARDEST_ITEMS_TOP_N = 5;
 // WIB = UTC+7 tanpa DST (lihat src/common/wib.ts). todayWIB()/addDays()
 // mengembalikan Date "penanda tanggal" (UTC-midnight dg Y-M-D = hari WIB) —
 // sama seperti kolom Session.date (@db.Date). Attempt.answeredAt sebaliknya
-// adalah timestamp NYATA, jadi batas hari WIB-nya harus dikoreksi -H7 dulu
-// (pola sama seperti answer.service.ts#reviewXpToday).
-const H7 = 7 * 3600_000;
-const wibDayInstant = (d: Date): number => d.getTime() - H7;
+// adalah timestamp NYATA, jadi batas hari WIB-nya harus jadi instan 00:00 WIB
+// dulu (wibMidnightInstant).
+const wibDayInstant = (d: Date): number => wibMidnightInstant(d).getTime();
 
 function fmt(d: Date): string {
   return d.toISOString().slice(0, 10);

@@ -12,7 +12,11 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppConfigService } from '../common/config.service';
-import { todayWIB, weekStartWIB } from '../common/wib';
+import {
+  addDays,
+  startOfDayWIBInstant,
+  startOfWeekWIBInstant,
+} from '../common/wib';
 // Nest 11 tidak mengekspor TooManyRequestsException → pakai HttpException 429.
 // `ElevenLabsClient` import type: cuma tipe di parameter ber-@Inject.
 import { ELEVENLABS_CLIENT } from './elevenlabs-client.service';
@@ -112,12 +116,23 @@ export class VoiceConversationService {
     // Hitung SEMUA row (PENDING + GRADED) — panggilan yang sedang berjalan pun
     // (webhook belum datang) memakai slot. Ini mencegah worst-case spend, bukan
     // sekadar XP-farming: sekali call berjalan, BE tidak bisa memotongnya.
+    // createdAt = timestamp nyata → batas hari/minggu WIB sbg instan (bukan
+    // penanda tanggal todayWIB(), yg jatuh di 07:00 WIB).
+    const now = new Date();
+    const dayStart = startOfDayWIBInstant(now);
+    const weekStart = startOfWeekWIBInstant(now);
     const [todayCount, weekCount] = await Promise.all([
       this.prisma.voiceConversation.count({
-        where: { userId, createdAt: { gte: todayWIB() } },
+        where: {
+          userId,
+          createdAt: { gte: dayStart, lt: addDays(dayStart, 1) },
+        },
       }),
       this.prisma.voiceConversation.count({
-        where: { userId, createdAt: { gte: weekStartWIB(new Date()) } },
+        where: {
+          userId,
+          createdAt: { gte: weekStart, lt: addDays(weekStart, 7) },
+        },
       }),
     ]);
     if (todayCount >= dailyCap) {
