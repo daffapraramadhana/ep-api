@@ -10,6 +10,7 @@ import { AppConfigService } from '../src/common/config.service';
 import { TTS_ENGINE } from '../src/tts/tts-engine';
 import { TtsService, TtsSpec } from '../src/tts/tts.service';
 import { TtsController } from '../src/tts/tts.controller';
+import { StorageService } from '../src/storage/storage.service';
 import { FakeTtsEngine } from './fake-tts-engine';
 
 const CACHE = 'public, max-age=31536000, immutable';
@@ -179,6 +180,29 @@ describe('TTS: urlsFor + GET /tts/:id.mp3', () => {
       'af_heart',
       'am_michael',
     ]);
+  });
+
+  it('file tts-<id>.mp3 sudah ada di storage (bucket bersama staging/prod) → dipakai tanpa sintesis', async () => {
+    const url = await register(spec('Already in the shared bucket'));
+    const id = url.slice(5, 37);
+    await app.get(StorageService).put(`tts-${id}.mp3`, Buffer.from('ID3fake'));
+    const calls = fake.calls.length;
+    await request(app.getHttpServer()).get(url).expect(200);
+    expect(fake.calls.length).toBe(calls);
+    const row = await prisma.ttsClip.findUniqueOrThrow({ where: { id } });
+    expect(row.fileName).toBe(`tts-${id}.mp3`);
+  });
+
+  it('TTS_ENABLED=0 + file sudah ada di storage → tetap dilayani', async () => {
+    const url = await register(spec('Shared bucket while disabled'));
+    const id = url.slice(5, 37);
+    await app.get(StorageService).put(`tts-${id}.mp3`, Buffer.from('ID3fake'));
+    await setEnabled('0');
+    try {
+      await request(app.getHttpServer()).get(url).expect(200);
+    } finally {
+      await setEnabled('1');
+    }
   });
 
   it('TTS_ENABLED=0: klip jadi tetap dilayani, klip belum jadi → null/503', async () => {

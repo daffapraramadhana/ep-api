@@ -78,10 +78,32 @@ export class TtsService {
 
   /** null = id tidak terdaftar. Melempar bila sintesis gagal/dinonaktifkan. */
   async ensureFile(id: string): Promise<string | null> {
+    return (await this.ensureFileDetailed(id))?.fileName ?? null;
+  }
+
+  /**
+   * Seperti ensureFile, plus asal file: `ready` (sudah tercatat), `reused`
+   * (file sudah ada di storage tapi belum tercatat — mis. staging & prod
+   * berbagi bucket; nama content-addressed = isi identik), `generated`.
+   */
+  async ensureFileDetailed(
+    id: string,
+  ): Promise<{
+    fileName: string;
+    source: 'ready' | 'reused' | 'generated';
+  } | null> {
     const clip = await this.prisma.ttsClip.findUnique({ where: { id } });
     if (!clip) return null;
     if (clip.fileName && (await this.storage.exists(clip.fileName)))
-      return clip.fileName;
+      return { fileName: clip.fileName, source: 'ready' };
+    const stored = `tts-${id}.mp3`;
+    if (await this.storage.exists(stored)) {
+      await this.prisma.ttsClip.update({
+        where: { id },
+        data: { fileName: stored, generatedAt: new Date() },
+      });
+      return { fileName: stored, source: 'reused' };
+    }
     if ((await this.config.getInt('TTS_ENABLED')) !== 1)
       throw new ServiceUnavailableException('Audio TTS sedang dinonaktifkan');
     let job = this.inflight.get(id);
@@ -92,7 +114,7 @@ export class TtsService {
       ).finally(() => this.inflight.delete(id));
       this.inflight.set(id, job);
     }
-    return job;
+    return { fileName: await job, source: 'generated' };
   }
 
   private async synthesize(

@@ -24,9 +24,12 @@ export class TtsBackfillService {
     private readonly tts: TtsService,
   ) {}
 
-  async backfill(
-    filter: BackfillFilter = {},
-  ): Promise<{ registered: number; generated: number; failed: number }> {
+  async backfill(filter: BackfillFilter = {}): Promise<{
+    registered: number;
+    generated: number;
+    reused: number;
+    failed: number;
+  }> {
     const items = await this.prisma.item.findMany({
       where: {
         status: { in: ['LIVE', 'DRAFT'] },
@@ -63,17 +66,19 @@ export class TtsBackfillService {
       select: { id: true },
     });
     let generated = 0;
+    let reused = 0;
     let failed = 0;
     for (const { id } of pending) {
       try {
-        await this.tts.ensureFile(id);
-        generated++;
+        const r = await this.tts.ensureFileDetailed(id);
+        if (r?.source === 'reused') reused++;
+        else if (r?.source === 'generated') generated++;
       } catch (e) {
         failed++;
         this.logger.warn(`Backfill klip ${id} gagal: ${(e as Error).message}`);
       }
     }
-    return { registered: ids.length, generated, failed };
+    return { registered: ids.length, generated, reused, failed };
   }
 
   async adoptSeedAudio(

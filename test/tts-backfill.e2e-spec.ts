@@ -9,6 +9,8 @@ import { PrismaService } from '../src/prisma/prisma.service';
 import { parseChapter } from '../src/modules/chapter-parser';
 import { TTS_ENGINE } from '../src/tts/tts-engine';
 import { TtsBackfillService } from '../src/tts/tts-backfill.service';
+import { StorageService } from '../src/storage/storage.service';
+import { clipId } from '../src/tts/tts-text';
 import { FakeTtsEngine } from './fake-tts-engine';
 
 describe('TTS backfill & adopsi audio seeder', () => {
@@ -202,5 +204,16 @@ describe('TTS backfill & adopsi audio seeder', () => {
       expect(c?.fileName).toBeTruthy();
     }
     expect((await svc.backfill(scope)).generated).toBe(0);
+  });
+
+  it('backfill memakai ulang file yang sudah ada di storage (bucket bersama)', async () => {
+    const text = `Reused from bucket ${stamp}`;
+    await lessonWith(6, [{ ttsText: text }]);
+    const id = clipId([{ voice: 'af_heart', text }]);
+    await app.get(StorageService).put(`tts-${id}.mp3`, Buffer.from('ID3fake'));
+    const calls = fake.calls.length;
+    const r = await svc.backfill({ codePrefix: code(6) });
+    expect(r).toMatchObject({ generated: 0, reused: 1, failed: 0 });
+    expect(fake.calls.length).toBe(calls);
   });
 });

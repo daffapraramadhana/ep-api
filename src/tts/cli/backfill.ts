@@ -23,7 +23,7 @@ async function main() {
     };
     const r = await app.get(TtsBackfillService).backfill(filter);
     console.log(
-      `✔ TTS backfill: ${r.registered} klip terdaftar, ${r.generated} dibuat, ${r.failed} gagal.`,
+      `✔ TTS backfill: ${r.registered} klip terdaftar, ${r.generated} dibuat, ${r.reused} dipakai ulang dari storage, ${r.failed} gagal.`,
     );
     process.exitCode = r.failed ? 1 : 0;
   } finally {
