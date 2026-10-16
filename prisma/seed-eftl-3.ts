@@ -65,6 +65,7 @@ export const def: KitModule = {
   level: 'MENENGAH',
   cefr: 'B1',
   status: 'LIVE',
+  showInPath: true,
   chapters: [
     {
       code: 'EFT-301',

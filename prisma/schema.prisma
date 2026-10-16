@@ -273,6 +273,9 @@ model Module {
   coverFile String?
   order     Int
   status    ContentStatus @default(DRAFT)
+  /// Kuis bab modul LIVE ini ikut Perjalanan, sesi harian, berbicara & penguatan
+  /// (PATH_LESSON). false = kuis hanya lewat modul (perilaku awal menu Modul).
+  showInPath Boolean @default(false)
   chapters  ModuleChapter[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

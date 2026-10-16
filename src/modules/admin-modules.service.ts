@@ -32,6 +32,7 @@ export interface ModuleInput {
   coverFile?: unknown;
   order?: unknown;
   status?: unknown;
+  showInPath?: unknown;
 }
 export interface ChapterInput {
   title?: unknown;
@@ -146,7 +147,13 @@ export class AdminModulesService {
       cefr?: Cefr;
       coverFile?: string | null;
       order?: number;
+      showInPath?: boolean;
     } = {};
+    if (dto.showInPath !== undefined) {
+      if (typeof dto.showInPath !== 'boolean')
+        throw new BadRequestException('showInPath harus true/false');
+      data.showInPath = dto.showInPath;
+    }
     if (dto.title !== undefined || creating) {
       if (typeof dto.title !== 'string' || !dto.title.trim())
         throw new BadRequestException('Judul wajib diisi');
@@ -240,6 +247,7 @@ export class AdminModulesService {
         coverFile: data.coverFile ?? null,
         slug,
         order: data.order ?? (max._max.order ?? 0) + 1,
+        showInPath: data.showInPath ?? false,
       },
     });
   }
@@ -272,6 +280,7 @@ export class AdminModulesService {
       coverUrl: m.coverFile ? this.storage.getUrl(m.coverFile) : null,
       order: m.order,
       status: m.status,
+      showInPath: m.showInPath,
       chapters: m.chapters.map((c) => ({
         id: c.id,
         order: c.order,

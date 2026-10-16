@@ -38,6 +38,7 @@ export const def: KitModule = {
   level: 'DASAR',
   cefr: 'A2',
   status: 'LIVE',
+  showInPath: true,
   chapters: [
     {
       code: 'EFT-201',

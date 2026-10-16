@@ -26,6 +26,10 @@ describe('POST /session/speaking (menu Berbicara)', () => {
   let speakingItemBId: string;
   const lessonS1ItemIds: string[] = []; // 2 UCAPAN + 1 PILIHAN_GANDA
   let nonSpeakingItemId: string;
+  // DB e2e = DB dev bersama (belum terisolasi, lihat backlog). Modul nyata yang
+  // ber-showInPath (mis. EFTL) menambah UCAPAN DASAR ke sesi berbicara —
+  // matikan selama file ini berjalan, pulihkan di afterAll.
+  let pathModuleIds: string[] = [];
 
   function post(path: string, body: Record<string, unknown>, token: string) {
     return request(app.getHttpServer())
@@ -46,6 +50,17 @@ describe('POST /session/speaking (menu Berbicara)', () => {
     app = m.createNestApplication();
     await app.init();
     prisma = app.get(PrismaService);
+
+    pathModuleIds = (
+      await prisma.module.findMany({
+        where: { showInPath: true },
+        select: { id: true },
+      })
+    ).map((m) => m.id);
+    await prisma.module.updateMany({
+      where: { id: { in: pathModuleIds } },
+      data: { showInPath: false },
+    });
 
     const passwordHash = await bcrypt.hash(PASSWORD, 10);
     const stamp = Date.now();
@@ -176,6 +191,10 @@ describe('POST /session/speaking (menu Berbicara)', () => {
   });
 
   afterAll(async () => {
+    await prisma.module.updateMany({
+      where: { id: { in: pathModuleIds } },
+      data: { showInPath: true },
+    });
     await prisma.attempt.deleteMany({
       where: { user: { email: { startsWith: 'p2s-' } } },
     });
@@ -241,16 +260,16 @@ describe('POST /session/speaking (menu Berbicara)', () => {
   });
 
   it('jawab semua benar → session COMPLETED + bonus XP + sessionsCompletedToday naik (speaking dihitung seperti sesi biasa)', async () => {
-    const items = (await get(`/session/${speakingSessionId}`, userSToken).expect(200))
-      .body.items as { itemId: string }[];
+    const items = (
+      await get(`/session/${speakingSessionId}`, userSToken).expect(200)
+    ).body.items as { itemId: string }[];
     expect(items.length).toBe(3);
 
     let last: any;
     for (const it of items) {
       // Jawab dengan kalimat referensi persis → wordOverlapRatio = 100%.
-      const ref = (
-        await prisma.item.findUnique({ where: { id: it.itemId } })
-      )?.answerKey;
+      const ref = (await prisma.item.findUnique({ where: { id: it.itemId } }))
+        ?.answerKey;
       last = await post(
         `/session/${speakingSessionId}/answer`,
         { itemId: it.itemId, answer: ref },
@@ -267,7 +286,7 @@ describe('POST /session/speaking (menu Berbicara)', () => {
     expect(stored?.status).toBe('COMPLETED');
     // Bonus sesi-lengkap + perfect-session: kind SPEAKING harus menerimanya
     // (answer.service gate dilebarkan), jadi xpAwarded > 0.
-    expect((stored?.xpAwarded ?? 0)).toBeGreaterThan(0);
+    expect(stored?.xpAwarded ?? 0).toBeGreaterThan(0);
 
     const summary = await get('/me/summary', userSToken).expect(200);
     expect(summary.body.sessionsCompletedToday).toBe(1);
@@ -277,11 +296,15 @@ describe('POST /session/speaking (menu Berbicara)', () => {
 
   it('409: level MAHIR punya lesson LIVE tapi tak ada item UCAPAN', async () => {
     const res = await post('/session/speaking', {}, userEmptyToken).expect(409);
-    expect(res.body.message).toBe('Belum ada latihan berbicara baru untuk levelmu');
+    expect(res.body.message).toBe(
+      'Belum ada latihan berbicara baru untuk levelmu',
+    );
   });
 
   it('409: user tanpa level (belum onboarding)', async () => {
-    const res = await post('/session/speaking', {}, userNoLevelToken).expect(409);
+    const res = await post('/session/speaking', {}, userNoLevelToken).expect(
+      409,
+    );
     expect(res.body.message).toBe('Pilih levelmu dulu di profil');
   });
 });
