@@ -344,6 +344,40 @@ describe('content CRUD (admin lessons/items)', () => {
     await prisma.lesson.delete({ where: { id: emptyLesson.id } });
   });
 
+  it('PATCH item UCAPAN di lesson SPEAKING → 200 dan answerKey tersimpan', async () => {
+    const lesson = await prisma.lesson.create({
+      data: {
+        code: 'CRUD-SPK',
+        title: 'Speaking CRUD',
+        topic: 'Topic CRUD',
+        level: 'DASAR',
+        cefr: 'A1',
+        skill: 'SPEAKING',
+        order: 9001,
+        status: 'DRAFT',
+      },
+    });
+    const item = await prisma.item.create({
+      data: {
+        lessonId: lesson.id,
+        order: 1,
+        type: 'UCAPAN',
+        prompt: 'Baca kalimat ini dengan lantang.',
+        answerKey: 'Good morning everyone',
+        explanation: 'Salam pagi.',
+      },
+    });
+
+    await request(app.getHttpServer())
+      .patch(`/admin/items/${item.id}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ answerKey: 'Good evening everyone' })
+      .expect(200);
+
+    const saved = await prisma.item.findUniqueOrThrow({ where: { id: item.id } });
+    expect(saved.answerKey).toBe('Good evening everyone');
+  });
+
   it('tidak ada route DELETE untuk lessons/items', async () => {
     await request(app.getHttpServer())
       .delete(`/admin/lessons/${lessonId}`)

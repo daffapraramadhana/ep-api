@@ -63,12 +63,14 @@ const SKILL_TO_TEMPLATE: Record<string, string> = {
   GRAMMAR: 'grammar',
   LISTENING: 'listening',
   READING: 'reading',
+  SPEAKING: 'speaking',
 };
 
 const TYPE_TO_TEMPLATE: Record<string, string> = {
   PILIHAN_GANDA: 'pilihan_ganda',
   ISIAN: 'isian',
   SUSUN_KALIMAT: 'susun_kalimat',
+  UCAPAN: 'ucapan',
 };
 
 @Injectable()
