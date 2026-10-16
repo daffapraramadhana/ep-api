@@ -269,11 +269,22 @@ describe('validateRows', () => {
     const { valid, errors } = validateRows([empty], new Set());
     expect(valid).toHaveLength(0);
     const requiredCols = [
-      'lesson_code', 'lesson_title', 'topic', 'level', 'cefr', 'skill',
-      'item_order', 'type', 'prompt', 'answer', 'explanation',
+      'lesson_code',
+      'lesson_title',
+      'topic',
+      'level',
+      'cefr',
+      'skill',
+      'item_order',
+      'type',
+      'prompt',
+      'answer',
+      'explanation',
     ];
     for (const col of requiredCols) {
-      expect(errors).toContainEqual(expect.objectContaining({ row: 2, column: col }));
+      expect(errors).toContainEqual(
+        expect.objectContaining({ row: 2, column: col }),
+      );
     }
   });
 
@@ -323,5 +334,49 @@ describe('validateRows', () => {
     expect(valid[0].explanation).toBe('Schedule = jadwal.');
     expect(valid[0].lessonTitle).toBe('Email Perkenalan');
     expect(valid[0].topic).toBe('Business');
+  });
+});
+
+describe('validateRows — tts_text', () => {
+  it('kolom tts_text tidak ada → ttsText undefined (dibiarkan saat reimport)', () => {
+    const { valid } = validateRows([base], new Set());
+    expect(valid[0].ttsText).toBeUndefined();
+  });
+
+  it('kolom ada tapi kosong → null', () => {
+    const { valid } = validateRows([{ ...base, tts_text: '' }], new Set());
+    expect(valid[0].ttsText).toBeNull();
+  });
+
+  it('diisi → disimpan apa adanya (ter-trim)', () => {
+    const { valid } = validateRows(
+      [{ ...base, tts_text: ' Hello there ' }],
+      new Set(),
+    );
+    expect(valid[0].ttsText).toBe('Hello there');
+  });
+
+  it('lebih dari 600 karakter → error', () => {
+    const { errors } = validateRows(
+      [{ ...base, tts_text: 'a'.repeat(601) }],
+      new Set(),
+    );
+    expect(errors).toContainEqual({
+      row: 2,
+      column: 'tts_text',
+      message: 'Teks audio maksimal 600 karakter',
+    });
+  });
+
+  it('dialog 3 pembicara → error kolom tts_text', () => {
+    const { errors } = validateRows(
+      [{ ...base, tts_text: 'A: one\nB: two\nC: three' }],
+      new Set(),
+    );
+    expect(errors).toContainEqual({
+      row: 2,
+      column: 'tts_text',
+      message: 'Teks audio maksimal 2 pembicara',
+    });
   });
 });

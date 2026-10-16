@@ -41,6 +41,17 @@ async function buildWorkbookFromRows(
   return Buffer.from(arrBuf);
 }
 
+async function buildWorkbookWith(
+  headers: string[],
+  rows: (string | number)[][],
+): Promise<Buffer> {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Soal');
+  ws.addRow(headers);
+  for (const row of rows) ws.addRow(row);
+  return Buffer.from(await wb.xlsx.writeBuffer());
+}
+
 async function buildTestWorkbook(): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('Soal');
@@ -279,6 +290,50 @@ describe('import (service)', () => {
     });
     expect(lesson.skill).toBe('SPEAKING');
   });
+
+  it('tts_text: tersimpan; sheet tanpa kolom membiarkannya; sel kosong mengosongkan', async () => {
+    const svc = app.get(ImportService);
+    const row = [
+      'TST-TTS',
+      'Listening TTS',
+      'Listening',
+      'dasar',
+      'A1',
+      'listening',
+      '1',
+      'pilihan_ganda',
+      'What does the guide say?',
+      'Hello',
+      'Bye',
+      'Thanks',
+      'Sorry',
+      'A',
+      '',
+      'Guide menyapa.',
+      '',
+      '',
+    ];
+    const ttsText = () =>
+      prisma.item
+        .findFirstOrThrow({ where: { lesson: { code: 'TST-TTS' } } })
+        .then((i) => i.ttsText);
+
+    await svc.importWorkbook(
+      await buildWorkbookWith(
+        [...HEADERS, 'tts_text'],
+        [[...row, 'A: Hello\nB: Hi']],
+      ),
+    );
+    expect(await ttsText()).toBe('A: Hello\nB: Hi');
+
+    await svc.importWorkbook(await buildWorkbookWith(HEADERS, [row]));
+    expect(await ttsText()).toBe('A: Hello\nB: Hi');
+
+    await svc.importWorkbook(
+      await buildWorkbookWith([...HEADERS, 'tts_text'], [[...row, '']]),
+    );
+    expect(await ttsText()).toBeNull();
+  });
 });
 
 describe('import endpoint', () => {
@@ -379,44 +434,48 @@ describe('import (round-trip: template deliverable)', () => {
     await app.close();
   });
 
-  it('template-soal-v1.xlsx (deliverable klien) lolos importer kita sendiri', async () => {
-    const svc = app.get(ImportService);
-    const templatePath = path.resolve(
-      __dirname,
-      '../../../deliverables/template-soal-v1.xlsx',
-    );
-    const buf = await fs.readFile(templatePath);
+  it.each(['v1', 'v2'])(
+    'template-soal-%s.xlsx (deliverable klien) lolos importer kita sendiri',
+    async (ver) => {
+      const svc = app.get(ImportService);
+      const templatePath = path.resolve(
+        __dirname,
+        `../../../deliverables/template-soal-${ver}.xlsx`,
+      );
+      const buf = await fs.readFile(templatePath);
 
-    // salin + tulis-ulang kolom lesson_code & media_file
-    const wb = new ExcelJS.Workbook();
-    await wb.xlsx.load(buf as unknown as ExcelJS.Buffer);
-    const ws = wb.worksheets.find((w) => w.name === 'Soal');
-    if (!ws) throw new Error('Sheet Soal tidak ditemukan di template');
-    const headers: Record<string, number> = {};
-    ws.getRow(1).eachCell((c, i) => {
-      headers[String(c.value ?? '').trim()] = i;
-    });
-    ws.eachRow((row, n) => {
-      if (n === 1) return;
-      const codeCell = row.getCell(headers['lesson_code']);
-      if (codeCell.value) codeCell.value = `${RT_PREFIX}${String(codeCell.value)}`;
-      const mediaCell = row.getCell(headers['media_file']);
-      if (mediaCell.value && String(mediaCell.value).trim() !== '')
-        mediaCell.value = RT_MEDIA;
-    });
-    const rtBuf = Buffer.from(await wb.xlsx.writeBuffer());
+      // salin + tulis-ulang kolom lesson_code & media_file
+      const wb = new ExcelJS.Workbook();
+      await wb.xlsx.load(buf as unknown as ExcelJS.Buffer);
+      const ws = wb.worksheets.find((w) => w.name === 'Soal');
+      if (!ws) throw new Error('Sheet Soal tidak ditemukan di template');
+      const headers: Record<string, number> = {};
+      ws.getRow(1).eachCell((c, i) => {
+        headers[String(c.value ?? '').trim()] = i;
+      });
+      ws.eachRow((row, n) => {
+        if (n === 1) return;
+        const codeCell = row.getCell(headers['lesson_code']);
+        if (codeCell.value)
+          codeCell.value = `${RT_PREFIX}${ver}-${String(codeCell.value)}`;
+        const mediaCell = row.getCell(headers['media_file']);
+        if (mediaCell.value && String(mediaCell.value).trim() !== '')
+          mediaCell.value = RT_MEDIA;
+      });
+      const rtBuf = Buffer.from(await wb.xlsx.writeBuffer());
 
-    const result = await svc.importWorkbook(rtBuf);
+      const result = await svc.importWorkbook(rtBuf);
 
-    expect(result.errors).toHaveLength(1);
-    expect(result.errors[0]).toMatchObject({
-      column: 'media_file',
-      message: `File media '${RT_MEDIA}' belum diunggah`,
-    });
-    // TESTRT-BUS-01 + TESTRT-RD-01 (LIS gagal) + TESTRT-SPK-01 (baris ucapan)
-    expect(result.lessonsCreated).toBe(3);
-    // 3 (BUS) + 1 (RD) + 1 (ucapan SPK)
-    expect(result.itemsCreated).toBe(5);
-    expect(result.skippedRows).toBe(1);
-  });
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0]).toMatchObject({
+        column: 'media_file',
+        message: `File media '${RT_MEDIA}' belum diunggah`,
+      });
+      // BUS-01 + RD-01 (LIS-01 gagal: media) + SPK-01 (ucapan); v2 + LIS-02 (tts_text)
+      expect(result.lessonsCreated).toBe(ver === 'v1' ? 3 : 4);
+      // 3 (BUS) + 1 (RD) + 1 (ucapan SPK); v2 + 1 (LIS-02)
+      expect(result.itemsCreated).toBe(ver === 'v1' ? 5 : 6);
+      expect(result.skippedRows).toBe(1);
+    },
+  );
 });

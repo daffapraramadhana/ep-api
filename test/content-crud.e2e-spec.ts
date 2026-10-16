@@ -374,8 +374,28 @@ describe('content CRUD (admin lessons/items)', () => {
       .send({ answerKey: 'Good evening everyone' })
       .expect(200);
 
-    const saved = await prisma.item.findUniqueOrThrow({ where: { id: item.id } });
+    const saved = await prisma.item.findUniqueOrThrow({
+      where: { id: item.id },
+    });
     expect(saved.answerKey).toBe('Good evening everyone');
+  });
+
+  it('PATCH ttsText dialog tersimpan; 3 pembicara → 400', async () => {
+    await request(app.getHttpServer())
+      .patch(`/admin/items/${pgItemId}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ ttsText: 'A: Hi\nB: Hello' })
+      .expect(200);
+    const saved = await prisma.item.findUniqueOrThrow({
+      where: { id: pgItemId },
+    });
+    expect(saved.ttsText).toBe('A: Hi\nB: Hello');
+
+    await request(app.getHttpServer())
+      .patch(`/admin/items/${pgItemId}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ ttsText: 'A: 1\nB: 2\nC: 3' })
+      .expect(400);
   });
 
   it('tidak ada route DELETE untuk lessons/items', async () => {

@@ -20,6 +20,7 @@ const HEADERS = [
   'explanation',
   'media_file',
   'passage',
+  'tts_text',
 ];
 
 const EXAMPLES = [
@@ -123,6 +124,47 @@ const EXAMPLES = [
     '',
     'MEMO: The monthly meeting is moved. It will be held on Wednesday at 10 AM in Room 3.',
   ],
+  [
+    'SPK-01',
+    'Berlatih Bicara',
+    'Speaking English',
+    'dasar',
+    'A1',
+    'speaking',
+    '1',
+    'ucapan',
+    'Baca kalimat ini dengan lantang.',
+    '',
+    '',
+    '',
+    '',
+    'I will call you tomorrow',
+    '',
+    'Latihan pelafalan: ucapkan dengan jelas, jangan terburu-buru.',
+    '',
+    '',
+  ],
+  [
+    'LIS-02',
+    'Sambutan di Bus',
+    'Tour English',
+    'dasar',
+    'A2',
+    'listening',
+    '1',
+    'pilihan_ganda',
+    'Dengarkan audio. Berapa lama turnya?',
+    'Two days',
+    'Three days',
+    'Five days',
+    'One week',
+    'C',
+    '',
+    '"…for the next five days" = selama lima hari ke depan.',
+    '',
+    '',
+    "Rina: Welcome to Yogyakarta! I'll be your tour leader for the next five days.\nMr. Lee: Thank you, Rina!",
+  ],
 ];
 
 async function main() {
@@ -133,7 +175,7 @@ async function main() {
   ws.views = [{ state: 'frozen', ySplit: 1 }];
   ws.columns.forEach((c, i) => {
     c.width = [
-      12, 20, 18, 10, 6, 12, 10, 14, 40, 14, 14, 14, 14, 10, 24, 40, 16, 50,
+      12, 20, 18, 10, 6, 12, 10, 14, 40, 14, 14, 14, 14, 10, 24, 40, 16, 50, 50,
     ][i];
   });
   const dropdown = (col: string, list: string[]) => {
@@ -146,8 +188,8 @@ async function main() {
   };
   dropdown('D', ['dasar', 'menengah', 'mahir']);
   dropdown('E', ['A1', 'A2', 'B1', 'B2', 'C1', 'C2']);
-  dropdown('F', ['vocabulary', 'grammar', 'listening', 'reading']);
-  dropdown('H', ['pilihan_ganda', 'isian', 'susun_kalimat']);
+  dropdown('F', ['vocabulary', 'grammar', 'listening', 'reading', 'speaking']);
+  dropdown('H', ['pilihan_ganda', 'isian', 'susun_kalimat', 'ucapan']);
 
   const pj = wb.addWorksheet('Petunjuk');
   [
@@ -168,7 +210,7 @@ async function main() {
     ['option_a–d', 'Hanya untuk pilihan_ganda. Keempatnya wajib diisi.'],
     [
       'answer',
-      'pilihan_ganda: A/B/C/D · isian: jawaban utama · susun_kalimat: kalimat lengkap yang benar (min. 3 kata).',
+      'pilihan_ganda: A/B/C/D · isian: jawaban utama · susun_kalimat: kalimat lengkap (min. 3 kata) · ucapan: kalimat yang harus diucapkan karyawan (min. 2 kata).',
     ],
     [
       'accepted_answers',
@@ -183,6 +225,15 @@ async function main() {
       'Nama file audio/gambar persis seperti yang diunggah admin. Kosongkan jika tidak ada.',
     ],
     ['passage', 'Teks bacaan untuk soal reading. Kosongkan jika tidak ada.'],
+    [
+      'ucapan',
+      'Prompt = instruksi (mis. "Baca kalimat ini dengan lantang."). Answer = kalimat yang diucapkan. Audio contoh dibuat otomatis oleh suara AI dari answer; isi tts_text bila bacaannya perlu berbeda, atau media_file untuk rekaman sendiri.',
+    ],
+    ['skill', 'Tambahan: speaking (soal ucapan).'],
+    [
+      'tts_text',
+      'Teks yang dibacakan suara AI. Untuk percakapan tulis per baris `Nama: kalimat`, maksimal 2 pembicara, 600 karakter. Kosongkan bila memakai file audio sendiri.',
+    ],
   ].forEach((r) => pj.addRow(r));
   pj.getRow(1).font = { bold: true };
   pj.getColumn(1).width = 22;
@@ -190,7 +241,7 @@ async function main() {
 
   const outPath = path.resolve(
     __dirname,
-    '../../../deliverables/template-soal-v1.xlsx',
+    '../../../deliverables/template-soal-v2.xlsx',
   );
   await wb.xlsx.writeFile(outPath);
   console.log(`template written: ${outPath}`);

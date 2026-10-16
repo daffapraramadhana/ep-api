@@ -44,6 +44,7 @@ export type ItemPatch = Partial<
     | 'explanation'
     | 'mediaFile'
     | 'passage'
+    | 'ttsText'
     | 'status'
   >
 >;
@@ -225,6 +226,7 @@ export class ContentService {
         explanation: normalized.explanation,
         mediaFile: normalized.mediaFile,
         passage: normalized.passage,
+        ttsText: normalized.ttsText ?? null,
         ...(safePatch.status !== undefined ? { status: safePatch.status } : {}),
       },
     });
@@ -255,6 +257,8 @@ export class ContentService {
       explanation: merged.explanation ?? '',
       media_file: merged.mediaFile ?? '',
       passage: merged.passage ?? '',
+      // selalu ber-kolom: PATCH menyimpan ttsText apa adanya (kosong → null)
+      tts_text: merged.ttsText ?? '',
     };
     return row;
   }

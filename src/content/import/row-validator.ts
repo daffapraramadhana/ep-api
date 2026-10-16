@@ -1,5 +1,6 @@
 // Pure function: no Nest/Prisma imports. Validates one parsed spreadsheet
 // sheet's rows against the question-import template contract.
+import { parseTtsScript, TTS_MAX_CHARS } from '../../tts/tts-text';
 
 export interface RawRow {
   [col: string]: string;
@@ -27,6 +28,8 @@ export interface NormalizedRow {
   explanation: string;
   mediaFile: string | null;
   passage: string | null;
+  /** undefined = kolom tts_text tidak ada di sheet (reimport membiarkan nilai lama) */
+  ttsText: string | null | undefined;
   sourceRow: number;
 }
 
@@ -83,12 +86,16 @@ export function validateRows(
 
     const level = LEVELS[(r.level ?? '').toLowerCase()];
     if (r.level && !level)
-      err('level', `Nilai level harus dasar/menengah/mahir, bukan '${r.level}'`);
+      err(
+        'level',
+        `Nilai level harus dasar/menengah/mahir, bukan '${r.level}'`,
+      );
     const cefr = (r.cefr ?? '').toUpperCase();
     if (r.cefr && !CEFRS.has(cefr))
       err('cefr', `Nilai cefr harus A1–C2, bukan '${r.cefr}'`);
     const skill = SKILLS[(r.skill ?? '').toLowerCase()];
-    if (r.skill && !skill) err('skill', `Nilai skill tidak dikenal: '${r.skill}'`);
+    if (r.skill && !skill)
+      err('skill', `Nilai skill tidak dikenal: '${r.skill}'`);
     const type = TYPES[(r.type ?? '').toLowerCase()];
     if (r.type && !type) err('type', `Nilai type tidak dikenal: '${r.type}'`);
 
@@ -123,7 +130,9 @@ export function validateRows(
         .filter(Boolean);
       if (
         answerKey &&
-        !acceptedAnswers.some((a) => a.toLowerCase() === answerKey.toLowerCase())
+        !acceptedAnswers.some(
+          (a) => a.toLowerCase() === answerKey.toLowerCase(),
+        )
       )
         acceptedAnswers.unshift(answerKey);
       if (!acceptedAnswers.length)
@@ -143,6 +152,18 @@ export function validateRows(
     if (mediaFile && !mediaNames.has(mediaFile))
       err('media_file', `File media '${mediaFile}' belum diunggah`);
 
+    // tts_text: teks yang dibacakan suara AI (spec audio-tts §5, §9).
+    let ttsText: string | null | undefined;
+    if (r.tts_text !== undefined) {
+      ttsText = r.tts_text.trim() || null;
+      if (ttsText && ttsText.length > TTS_MAX_CHARS)
+        err('tts_text', `Teks audio maksimal ${TTS_MAX_CHARS} karakter`);
+      else if (ttsText) {
+        const script = parseTtsScript(ttsText);
+        if ('error' in script) err('tts_text', script.error);
+      }
+    }
+
     const code = (r.lesson_code ?? '').trim();
     if (code) {
       const sig = [
@@ -159,7 +180,8 @@ export function validateRows(
         const firstFields = first.sig.split('|');
         const newFields = sig.split('|');
         const diff =
-          cols.find((_, ci) => firstFields[ci] !== newFields[ci]) ?? 'lesson_title';
+          cols.find((_, ci) => firstFields[ci] !== newFields[ci]) ??
+          'lesson_title';
         err(diff, `Metadata lesson '${code}' berbeda dari baris ${first.row}`);
       }
       const key = `${code}#${itemOrder}`;
@@ -188,6 +210,7 @@ export function validateRows(
         explanation: r.explanation.trim(),
         mediaFile,
         passage: (r.passage ?? '').trim() || null,
+        ttsText,
         sourceRow: row,
       });
   });

@@ -82,6 +82,7 @@ export class ImportService {
             explanation: v.explanation,
             mediaFile: v.mediaFile,
             passage: v.passage,
+            ...(v.ttsText !== undefined ? { ttsText: v.ttsText } : {}),
           };
           const existing = await tx.item.findUnique({
             where: {
