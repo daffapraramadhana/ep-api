@@ -61,3 +61,22 @@ describe('MediaController#serve (driver branching)', () => {
     expect(res.sendFile).not.toHaveBeenCalled();
   });
 });
+
+describe('MediaController#list', () => {
+  it('menyembunyikan klip TTS (tts-*.mp3) dari pustaka media admin', async () => {
+    const storage: Partial<StorageService> = {
+      listNames: jest
+        .fn()
+        .mockResolvedValue([
+          'audio_001.mp3',
+          'tts-0123456789abcdef0123456789abcdef.mp3',
+        ]),
+      stat: jest.fn().mockResolvedValue({ size: 10 }),
+    };
+    const controller = new MediaController(storage as StorageService);
+    expect(await controller.list()).toEqual([
+      { name: 'audio_001.mp3', size: 10 },
+    ]);
+    expect(storage.stat).toHaveBeenCalledTimes(1);
+  });
+});

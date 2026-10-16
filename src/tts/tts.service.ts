@@ -13,7 +13,7 @@ import { encodeMp3, joinSegments, PcmAudio } from './audio-encode';
 import { IdleUnloader } from './idle-unloader';
 import { TTS_ENGINE } from './tts-engine';
 import type { TtsEngine } from './tts-engine';
-import { clipId, TtsSegment } from './tts-text';
+import { chunkText, clipId, TtsSegment } from './tts-text';
 
 export type TtsSpec = { segments: TtsSegment[] };
 
@@ -103,8 +103,15 @@ export class TtsService {
       return await this.withSlot(() =>
         this.idle.run(async () => {
           const parts: PcmAudio[] = [];
-          for (const seg of segments)
-            parts.push(await this.engine.synthesize(seg));
+          for (const seg of segments) {
+            // Kokoro memotong teks panjang diam-diam — sintesis per potongan.
+            const chunks: PcmAudio[] = [];
+            for (const text of chunkText(seg.text))
+              chunks.push(
+                await this.engine.synthesize({ voice: seg.voice, text }),
+              );
+            parts.push(joinSegments(chunks, 150));
+          }
           const { buf, durationMs } = encodeMp3(joinSegments(parts));
           const fileName = `tts-${id}.mp3`;
           await this.storage.put(fileName, buf);

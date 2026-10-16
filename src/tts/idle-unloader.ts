@@ -5,6 +5,8 @@
  * tugas `run` yang berjalan, tidak pernah melepas; timer dihitung dari
  * selesainya tugas terakhir. Timer di-unref supaya tidak menahan proses.
  */
+const DEFAULT_IDLE_MS = 10 * 60_000;
+
 export class IdleUnloader {
   private active = 0;
   private timer: NodeJS.Timeout | null = null;
@@ -22,7 +24,8 @@ export class IdleUnloader {
       return await fn();
     } finally {
       this.active--;
-      if (this.active === 0) void this.schedule();
+      // schedule() tak pernah boleh menolak: rejection tak tertangani = proses mati.
+      if (this.active === 0) void this.schedule().catch(() => undefined);
     }
   }
 
@@ -34,7 +37,13 @@ export class IdleUnloader {
 
   private async schedule() {
     const gen = ++this.generation;
-    const ms = await this.idleMs();
+    let ms: number;
+    try {
+      ms = await this.idleMs();
+    } catch {
+      ms = DEFAULT_IDLE_MS; // config/DB gagal dibaca → tetap lepas model nanti
+    }
+    if (!Number.isFinite(ms) || ms <= 0) ms = DEFAULT_IDLE_MS;
     if (gen !== this.generation || this.active > 0) return;
     this.timer = setTimeout(() => {
       this.timer = null;

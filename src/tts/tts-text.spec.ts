@@ -1,4 +1,4 @@
-import { clipId, parseTtsScript, speakableText } from './tts-text';
+import { chunkText, clipId, parseTtsScript, speakableText } from './tts-text';
 
 describe('speakableText', () => {
   it('alternatif " / " jadi jeda koma', () => {
@@ -81,5 +81,63 @@ describe('clipId', () => {
     expect(clipId([{ ...seg[0], text: 'How was your trip here?' }])).not.toBe(
       clipId(seg),
     );
+  });
+});
+
+describe('parseTtsScript — jam & rasio bukan pembicara', () => {
+  it('baris berisi jam (9:30) tetap narasi utuh', () => {
+    expect(
+      parseTtsScript('The train leaves at 9:30.\nPlease arrive by 9:15.'),
+    ).toEqual({
+      segments: [
+        {
+          voice: 'af_heart',
+          text: 'The train leaves at 9:30. Please arrive by 9:15.',
+        },
+      ],
+    });
+  });
+
+  it('rasio (1:2) tanpa spasi setelah titik dua bukan pembicara', () => {
+    const r = parseTtsScript('Mix it 1:2 with water\nThen stir 3:1 again');
+    expect('segments' in r && r.segments).toHaveLength(1);
+  });
+
+  it('nama pembicara panjang (> 4 kata) bukan pembicara', () => {
+    const r = parseTtsScript(
+      'Please remember the following rule: be on time\nAnd one more important thing to note: smile',
+    );
+    expect('segments' in r && r.segments).toHaveLength(1);
+  });
+});
+
+describe('chunkText', () => {
+  const sentence = 'The guests will visit the old palace in the morning. ';
+
+  it('teks pendek tidak dipecah', () => {
+    expect(chunkText('How was your flight here?')).toEqual([
+      'How was your flight here?',
+    ]);
+  });
+
+  it('teks 600 karakter dipecah di batas kalimat, tiap potong ≤ 300, tanpa kata hilang', () => {
+    const text = sentence.repeat(12).trim();
+    expect(text.length).toBeGreaterThan(600);
+    const chunks = chunkText(text);
+    expect(chunks.length).toBeGreaterThan(1);
+    for (const c of chunks) expect(c.length).toBeLessThanOrEqual(300);
+    for (const c of chunks) expect(c.endsWith('.')).toBe(true);
+    expect(chunks.join(' ')).toBe(text);
+  });
+
+  it('kalimat tunggal tanpa titik dipecah di koma lalu di spasi', () => {
+    const words = Array.from({ length: 90 }, (_, i) => `word${i}`);
+    const withCommas = words.join(' ').replace(/(word\d*9) /g, '$1, ');
+    for (const text of [withCommas, words.join(' ')]) {
+      const chunks = chunkText(text);
+      expect(chunks.length).toBeGreaterThan(1);
+      for (const c of chunks) expect(c.length).toBeLessThanOrEqual(300);
+      expect(chunks.join(' ')).toBe(text);
+    }
   });
 });

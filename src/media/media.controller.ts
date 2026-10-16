@@ -54,7 +54,10 @@ export class MediaController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   async list() {
-    const names = await this.storage.listNames();
+    // Klip TTS (tts-*.mp3) dikelola server, bukan aset unggahan admin.
+    const names = (await this.storage.listNames()).filter(
+      (n) => !n.startsWith('tts-'),
+    );
     const entries = await Promise.all(
       names.map(async (name) => {
         try {
@@ -67,7 +70,9 @@ export class MediaController {
         }
       }),
     );
-    return entries.filter((e): e is { name: string; size: number } => e !== null);
+    return entries.filter(
+      (e): e is { name: string; size: number } => e !== null,
+    );
   }
 
   @Get('media/:name')

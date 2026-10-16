@@ -157,6 +157,19 @@ describe('TTS: urlsFor + GET /tts/:id.mp3', () => {
     expect(fake.calls.length).toBe(calls + 1);
   });
 
+  it('teks panjang dipecah per ≤300 karakter sebelum ke engine (Kokoro memotong >512 token)', async () => {
+    const long = 'The guests will visit the old palace in the morning. '.repeat(
+      12,
+    );
+    const url = await register(spec(long.trim()));
+    const calls = fake.calls.length;
+    await request(app.getHttpServer()).get(url).expect(200);
+    const sent = fake.calls.slice(calls);
+    expect(sent.length).toBeGreaterThan(1);
+    for (const c of sent) expect(c.text.length).toBeLessThanOrEqual(300);
+    expect(sent.map((c) => c.text).join(' ')).toContain('palace');
+  });
+
   it('dialog dua segmen → dua sintesis, satu file', async () => {
     const url = await register(spec('Hello Rina', 'Hi Mr Lee'));
     const calls = fake.calls.length;

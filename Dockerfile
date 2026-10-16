@@ -13,6 +13,9 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends python3 make g++ \
   && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json ./
+# onnxruntime-node di linux/x64 mengunduh bundle GPU/CUDA dari GitHub saat
+# install (ratusan MB, menimpa .so CPU) — kita hanya pakai CPU.
+ENV ONNXRUNTIME_NODE_INSTALL_CUDA=skip
 RUN npm ci
 
 ########################
@@ -41,6 +44,7 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends python3 make g++ \
   && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json ./
+ENV ONNXRUNTIME_NODE_INSTALL_CUDA=skip
 RUN npm ci --omit=dev
 
 ########################

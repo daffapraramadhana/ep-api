@@ -15,8 +15,19 @@ export const TTS_MAX_CHARS = 600;
 
 export type TtsSegment = { voice: string; text: string };
 
-// Sama dengan DIALOG_RE di chapter-parser: "Nama (peran): kalimat".
-const DIALOG_RE = /^([^:()]+?)\s*(?:\(([^)]*)\))?\s*:\s*(.+)$/;
+// "Nama (peran): kalimat" — lebih ketat dari DIALOG_RE chapter-parser karena di
+// sini dialog dideteksi implisit: nama tanpa angka (jam "9:30", rasio "1:2"
+// bukan pembicara), wajib spasi setelah titik dua, maks 4 kata / 40 karakter.
+const DIALOG_RE = /^([^\d:()]{1,40}?)\s*(?:\(([^)]*)\))?\s*:\s+(.+)$/;
+const MAX_SPEAKER_WORDS = 4;
+
+function speakerLine(line: string): RegExpExecArray | null {
+  const m = DIALOG_RE.exec(line);
+  return m && m[1].trim().split(/\s+/).length <= MAX_SPEAKER_WORDS ? m : null;
+}
+
+/** Batas aman per panggilan engine: Kokoro memotong diam-diam >512 token fonem (±500 char). */
+export const TTS_CHUNK_CHARS = 300;
 
 export function speakableText(s: string): string {
   const t = s
@@ -35,7 +46,7 @@ export function parseTtsScript(
     .split(/\r?\n/)
     .map((l) => l.trim())
     .filter(Boolean);
-  const matches = lines.map((l) => DIALOG_RE.exec(l));
+  const matches = lines.map(speakerLine);
   // Satu baris "Catatan: ..." tetap narasi — dialog butuh ≥2 baris.
   if (lines.length >= 2 && matches.every(Boolean)) {
     const voices = new Map<string, string>();
@@ -54,6 +65,38 @@ export function parseTtsScript(
   }
   const spoken = speakableText(lines.join(' '));
   return { segments: spoken ? [{ voice: VOICE_NARRATOR, text: spoken }] : [] };
+}
+
+/** Kemas potongan berurutan menjadi kelompok ≤ max karakter (digabung spasi). */
+function pack(pieces: string[], max: number): string[] {
+  const out: string[] = [];
+  for (const p of pieces) {
+    const last = out[out.length - 1];
+    if (last !== undefined && last.length + 1 + p.length <= max)
+      out[out.length - 1] = `${last} ${p}`;
+    else out.push(p);
+  }
+  return out;
+}
+
+/**
+ * Pecah teks untuk engine: per kalimat, lalu per koma, lalu per kata — tiap
+ * potong ≤ max, tanpa kata hilang (join(' ') = teks asal ber-spasi tunggal).
+ */
+export function chunkText(text: string, max = TTS_CHUNK_CHARS): string[] {
+  if (text.length <= max) return [text];
+  const split = (t: string, level: number): string[] => {
+    if (t.length <= max) return [t];
+    const re = [/(?<=[.!?])\s+/, /(?<=[,;])\s+/, /\s+/][level];
+    if (!re) return [t]; // satu "kata" > max: tak bisa dipecah lebih jauh
+    const parts = t.split(re).filter(Boolean);
+    if (parts.length === 1) return split(t, level + 1);
+    return pack(
+      parts.flatMap((p) => split(p, level + 1)),
+      max,
+    );
+  };
+  return split(text, 0);
 }
 
 export function clipId(segments: TtsSegment[]): string {

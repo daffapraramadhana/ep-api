@@ -16,6 +16,11 @@ describe('itemSpecs', () => {
     expect(r.media).toBeNull();
   });
 
+  it('UCAPAN dengan ttsText → tidak mendapat media (contoh tidak diputar otomatis)', () => {
+    const r = itemSpecs({ ...base, type: 'UCAPAN', ttsText: 'Good morning!' });
+    expect(r.media).toBeNull();
+  });
+
   it('UCAPAN dengan ttsText → target dari ttsText', () => {
     const r = itemSpecs({
       ...base,

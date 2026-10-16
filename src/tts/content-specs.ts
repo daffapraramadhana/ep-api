@@ -33,7 +33,11 @@ export function itemSpecs(item: AudioItem): {
   return {
     target:
       item.type === 'UCAPAN' ? script(item.ttsText ?? item.answerKey) : null,
-    media: item.ttsText && !item.mediaFile ? script(item.ttsText) : null,
+    // UCAPAN: ttsText hanya mengubah bacaan contoh — bukan audio soal yang autoplay.
+    media:
+      item.type !== 'UCAPAN' && item.ttsText && !item.mediaFile
+        ? script(item.ttsText)
+        : null,
   };
 }
 

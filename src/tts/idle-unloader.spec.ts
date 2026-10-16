@@ -69,4 +69,31 @@ describe('IdleUnloader', () => {
     jest.advanceTimersByTime(10 * MIN);
     expect(onIdle).toHaveBeenCalledTimes(1);
   });
+
+  it('idleMs gagal dibaca (DB/config) → tidak crash, pakai default 10 menit', async () => {
+    const onIdle = jest.fn();
+    const u = new IdleUnloader(
+      () => Promise.reject(new Error('db down')),
+      onIdle,
+    );
+    await u.run(async () => 'ok');
+    await settle();
+    jest.advanceTimersByTime(10 * MIN - 1);
+    expect(onIdle).not.toHaveBeenCalled();
+    jest.advanceTimersByTime(1);
+    expect(onIdle).toHaveBeenCalledTimes(1);
+  });
+
+  it('idleMs bukan angka valid (NaN/≤0) → default 10 menit, bukan langsung', async () => {
+    for (const bad of [NaN, 0, -5]) {
+      const onIdle = jest.fn();
+      const u = new IdleUnloader(() => bad, onIdle);
+      await u.run(async () => 'ok');
+      await settle();
+      jest.advanceTimersByTime(10 * MIN - 1);
+      expect(onIdle).not.toHaveBeenCalled();
+      jest.advanceTimersByTime(1);
+      expect(onIdle).toHaveBeenCalledTimes(1);
+    }
+  });
 });
