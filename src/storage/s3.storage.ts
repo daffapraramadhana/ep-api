@@ -40,6 +40,7 @@ export class S3StorageService extends StorageService {
         Bucket: this.bucket,
         Key: this.safe(name),
         Body: buf,
+        ...(name.endsWith('.mp3') ? { ContentType: 'audio/mpeg' } : {}),
       }),
     );
   }

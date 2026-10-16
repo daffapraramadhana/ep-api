@@ -14,6 +14,7 @@ import { ProgressModule } from './progress/progress.module';
 import { MonitoringModule } from './monitoring/monitoring.module';
 import { VoiceConversationModule } from './voice-conversation/voice-conversation.module';
 import { ModulesModule } from './modules/modules.module';
+import { TtsModule } from './tts/tts.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { ModulesModule } from './modules/modules.module';
     MonitoringModule,
     VoiceConversationModule,
     ModulesModule,
+    TtsModule,
   ],
   controllers: [AppController],
   providers: [],

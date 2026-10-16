@@ -16,4 +16,9 @@ export class AppConfigService {
     this.cache.set(key, { v, at: Date.now() });
     return v;
   }
+
+  /** Lupakan cache 60 dtk — dipakai test yang mengubah config di tengah jalan. */
+  clearCache(): void {
+    this.cache.clear();
+  }
 }
