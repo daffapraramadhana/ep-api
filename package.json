@@ -22,6 +22,7 @@
     "seed:demo": "ts-node prisma/seed-demo.ts",
     "seed:complaints": "ts-node prisma/seed-complaints.ts",
     "seed:module-complaints": "ts-node prisma/seed-module-complaints.ts",
+    "seed:eftl-1": "ts-node prisma/seed-eftl-1.ts",
     "audio:push:minio": "ts-node scripts/upload-audio-minio.ts"
   },
   "dependencies": {
