@@ -62,7 +62,9 @@ describe('IdleUnloader', () => {
   it('tugas yang gagal tetap menjadwalkan pelepasan', async () => {
     const onIdle = jest.fn();
     const u = new IdleUnloader(() => 10 * MIN, onIdle);
-    await expect(u.run(async () => Promise.reject(new Error('x')))).rejects.toThrow('x');
+    await expect(
+      u.run(async () => Promise.reject(new Error('x'))),
+    ).rejects.toThrow('x');
     await settle();
     jest.advanceTimersByTime(10 * MIN);
     expect(onIdle).toHaveBeenCalledTimes(1);

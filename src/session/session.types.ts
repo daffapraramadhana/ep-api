@@ -6,10 +6,11 @@ export interface SessionItemView {
   type: 'PILIHAN_GANDA' | 'ISIAN' | 'SUSUN_KALIMAT' | 'UCAPAN';
   prompt: string;
   options: string[] | null;
-  mediaUrl: string | null; // dari StorageService.getUrl(mediaFile) bila ada
+  mediaUrl: string | null; // getUrl(mediaFile) bila ada, selain itu audio TTS dari ttsText
   passage: string | null;
   chips: string[] | null; // SUSUN_KALIMAT: kata answerKey di-shuffle DI BE
   targetText: string | null; // UCAPAN: kalimat yang harus diucapkan (== answerKey; bocor sengaja, bukan rahasia utk tipe ini)
+  targetAudioUrl: string | null; // UCAPAN: audio TTS contoh ucapan (/tts/{id}.mp3), null bila tak ada
   answeredCorrect: boolean;
 }
 

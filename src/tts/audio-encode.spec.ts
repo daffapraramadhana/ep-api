@@ -27,7 +27,8 @@ describe('joinSegments', () => {
 describe('encodeMp3', () => {
   it('menghasilkan frame MP3 dan durasi yang benar', () => {
     const samples = new Float32Array(24000);
-    for (let i = 0; i < samples.length; i++) samples[i] = Math.sin(i / 10) * 0.5;
+    for (let i = 0; i < samples.length; i++)
+      samples[i] = Math.sin(i / 10) * 0.5;
     const { buf, durationMs } = encodeMp3({ samples, sampleRate: 24000 });
     expect(buf.length).toBeGreaterThan(0);
     expect(buf[0]).toBe(0xff);
@@ -37,6 +38,8 @@ describe('encodeMp3', () => {
 
   it('sampel di luar [-1, 1] di-clamp, tidak melempar', () => {
     const samples = new Float32Array(2400).fill(3);
-    expect(encodeMp3({ samples, sampleRate: 24000 }).buf.length).toBeGreaterThan(0);
+    expect(
+      encodeMp3({ samples, sampleRate: 24000 }).buf.length,
+    ).toBeGreaterThan(0);
   });
 });

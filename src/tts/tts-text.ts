@@ -43,7 +43,8 @@ export function parseTtsScript(
     for (const m of matches as RegExpExecArray[]) {
       const speaker = m[1].trim().toLowerCase();
       if (!voices.has(speaker)) {
-        if (voices.size >= 2) return { error: 'Teks audio maksimal 2 pembicara' };
+        if (voices.size >= 2)
+          return { error: 'Teks audio maksimal 2 pembicara' };
         voices.set(speaker, voices.size === 0 ? VOICE_LEFT : VOICE_RIGHT);
       }
       const spoken = speakableText(m[3]);

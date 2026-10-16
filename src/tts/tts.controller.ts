@@ -34,7 +34,9 @@ export class TtsController {
     try {
       const winner = await Promise.race([
         job,
-        new Promise<'timeout'>((r) => (timer = setTimeout(() => r('timeout'), TtsController.waitMs))),
+        new Promise<'timeout'>(
+          (r) => (timer = setTimeout(() => r('timeout'), TtsController.waitMs)),
+        ),
       ]);
       if (winner === 'timeout') return res.status(503).end();
       fileName = winner;

@@ -8,6 +8,8 @@ import { Level, Lesson, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import { AppConfigService } from '../common/config.service';
+import { TtsService } from '../tts/tts.service';
+import { itemSpecs } from '../tts/content-specs';
 import { todayWIB } from '../common/wib';
 import { SessionItemView, SessionView } from './session.types';
 import { PATH_LESSON } from '../common/content-scope';
@@ -67,6 +69,7 @@ export class SessionService {
     private prisma: PrismaService,
     private storage: StorageService,
     private config: AppConfigService,
+    private tts: TtsService,
   ) {}
 
   /**
@@ -399,7 +402,11 @@ export class SessionService {
             ? firstLessonSlot.item.lesson.title
             : null;
 
-    const items: SessionItemView[] = session.items.map((si) => {
+    // Daftarkan klip TTS (tanpa menyintesis) — satu panggilan untuk semua item.
+    const specs = session.items.map((si) => itemSpecs(si.item));
+    const audio = await this.tts.urlsFor(specs.flatMap((s) => [s.target, s.media]));
+
+    const items: SessionItemView[] = session.items.map((si, idx) => {
       const item = si.item;
       const options = (item.options as string[] | null) ?? null;
       const chips =
@@ -413,13 +420,16 @@ export class SessionService {
         type: item.type,
         prompt: item.prompt,
         options,
-        mediaUrl: item.mediaFile ? this.storage.getUrl(item.mediaFile) : null,
+        mediaUrl: item.mediaFile
+          ? this.storage.getUrl(item.mediaFile)
+          : audio[idx * 2 + 1],
         passage: item.passage,
         chips,
         // UCAPAN: kalimat referensi HARUS ditampilkan ke user agar dibaca —
         // bocor sengaja, bukan rahasia utk tipe ini (bukan kunci jawaban
         // yang bisa "dibobol").
         targetText: item.type === 'UCAPAN' ? item.answerKey : null,
+        targetAudioUrl: audio[idx * 2],
         answeredCorrect: correctSet.has(item.id),
       };
     });

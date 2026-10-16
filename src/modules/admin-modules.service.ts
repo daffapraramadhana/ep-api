@@ -15,7 +15,8 @@ import {
   ParseResult,
   StoredBlock,
 } from './chapter-parser';
-import { ChapterBlock, resolveBlocks } from './blocks';
+import { attachChapterAudio, ChapterBlock, resolveBlocks } from './blocks';
+import { TtsService } from '../tts/tts.service';
 import { slugify } from './slug';
 
 const LEVELS: Level[] = ['DASAR', 'MENENGAH', 'MAHIR'];
@@ -86,6 +87,7 @@ export class AdminModulesService {
     private prisma: PrismaService,
     private storage: StorageService,
     private content: ContentService,
+    private tts: TtsService,
   ) {}
 
   // ---------- parse ----------
@@ -350,7 +352,10 @@ export class AdminModulesService {
       title: c.title,
       estMinutes: c.estMinutes,
       body: c.body,
-      blocks: resolveBlocks(c.blocks as unknown as StoredBlock[], this.storage),
+      blocks: await attachChapterAudio(
+        resolveBlocks(c.blocks as unknown as StoredBlock[], this.storage),
+        this.tts,
+      ),
       module: c.module,
       lesson: lessonSummary(c.lesson),
     };

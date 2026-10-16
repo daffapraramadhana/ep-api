@@ -33,7 +33,8 @@ export function joinSegments(parts: PcmAudio[], gapMs = 350): PcmAudio {
     throw new Error('Sample rate segmen berbeda');
   if (parts.length === 1) return parts[0];
   const gap = Math.round((sampleRate * gapMs) / 1000);
-  const total = parts.reduce((n, p) => n + p.samples.length, 0) + gap * (parts.length - 1);
+  const total =
+    parts.reduce((n, p) => n + p.samples.length, 0) + gap * (parts.length - 1);
   const samples = new Float32Array(total); // nol = jeda senyap
   let at = 0;
   parts.forEach((p, i) => {
@@ -43,7 +44,10 @@ export function joinSegments(parts: PcmAudio[], gapMs = 350): PcmAudio {
   return { samples, sampleRate };
 }
 
-export function encodeMp3(audio: PcmAudio, kbps = 64): { buf: Buffer; durationMs: number } {
+export function encodeMp3(
+  audio: PcmAudio,
+  kbps = 64,
+): { buf: Buffer; durationMs: number } {
   const pcm = new Int16Array(audio.samples.length);
   for (let i = 0; i < pcm.length; i++) {
     const v = Math.max(-1, Math.min(1, audio.samples[i]));
@@ -54,10 +58,12 @@ export function encodeMp3(audio: PcmAudio, kbps = 64): { buf: Buffer; durationMs
   const FRAME = 1152;
   for (let i = 0; i < pcm.length; i += FRAME) {
     const out = enc.encodeBuffer(pcm.subarray(i, i + FRAME));
-    if (out.length) chunks.push(Buffer.from(out.buffer, out.byteOffset, out.length));
+    if (out.length)
+      chunks.push(Buffer.from(out.buffer, out.byteOffset, out.length));
   }
   const tail = enc.flush();
-  if (tail.length) chunks.push(Buffer.from(tail.buffer, tail.byteOffset, tail.length));
+  if (tail.length)
+    chunks.push(Buffer.from(tail.buffer, tail.byteOffset, tail.length));
   return {
     buf: Buffer.concat(chunks),
     durationMs: Math.round((audio.samples.length / audio.sampleRate) * 1000),

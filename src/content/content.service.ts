@@ -5,6 +5,8 @@ import {
 } from '@nestjs/common';
 import { ContentStatus, Item, Lesson, Level, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { TtsService } from '../tts/tts.service';
+import { itemSpecs } from '../tts/content-specs';
 import { StorageService } from '../storage/storage.service';
 import { validateRows, RawRow } from './import/row-validator';
 
@@ -78,6 +80,7 @@ export class ContentService {
   constructor(
     private prisma: PrismaService,
     private storage: StorageService,
+    private tts: TtsService,
   ) {}
 
   assertTransition(from: string, to: string) {
@@ -157,15 +160,28 @@ export class ContentService {
     });
   }
 
-  async listLessonItems(lessonId: string): Promise<Item[]> {
+  /** Item + audioUrl untuk pemutar editor: file unggahan, selain itu klip TTS. */
+  async listLessonItems(
+    lessonId: string,
+  ): Promise<(Item & { audioUrl: string | null })[]> {
     const lesson = await this.prisma.lesson.findUnique({
       where: { id: lessonId },
     });
     if (!lesson) throw new NotFoundException();
-    return this.prisma.item.findMany({
+    const items = await this.prisma.item.findMany({
       where: { lessonId },
       orderBy: { order: 'asc' },
     });
+    const urls = await this.tts.urlsFor(
+      items.map((it) => {
+        const s = itemSpecs(it);
+        return it.mediaFile ? null : (s.media ?? s.target);
+      }),
+    );
+    return items.map((it, i) => ({
+      ...it,
+      audioUrl: it.mediaFile ? this.storage.getUrl(it.mediaFile) : urls[i],
+    }));
   }
 
   async updateItem(id: string, patch: ItemPatch): Promise<Item> {

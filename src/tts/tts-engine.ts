@@ -16,7 +16,9 @@ export interface TtsEngine {
 }
 
 const MODEL = 'onnx-community/Kokoro-82M-v1.0-ONNX';
-type KokoroVoice = NonNullable<NonNullable<Parameters<KokoroTTS['generate']>[1]>['voice']>;
+type KokoroVoice = NonNullable<
+  NonNullable<Parameters<KokoroTTS['generate']>[1]>['voice']
+>;
 
 /**
  * Kokoro-82M (q8, CPU) lewat kokoro-js. Model dimuat lazy pada sintesis
@@ -55,6 +57,8 @@ export class KokoroEngine implements TtsEngine {
     this.model = null;
     if (!pending) return;
     const tts = await pending.catch(() => null);
-    await (tts?.model as { dispose?: () => Promise<unknown> } | undefined)?.dispose?.();
+    await (
+      tts?.model as { dispose?: () => Promise<unknown> } | undefined
+    )?.dispose?.();
   }
 }

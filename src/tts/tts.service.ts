@@ -1,12 +1,18 @@
 // apps/api/src/tts/tts.service.ts
-import { Inject, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AppConfigService } from '../common/config.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import { encodeMp3, joinSegments, PcmAudio } from './audio-encode';
 import { IdleUnloader } from './idle-unloader';
-import { TTS_ENGINE, TtsEngine } from './tts-engine';
+import { TTS_ENGINE } from './tts-engine';
+import type { TtsEngine } from './tts-engine';
 import { clipId, TtsSegment } from './tts-text';
 
 export type TtsSpec = { segments: TtsSegment[] };
@@ -32,7 +38,8 @@ export class TtsService {
     @Inject(TTS_ENGINE) private readonly engine: TtsEngine,
   ) {
     this.idle = new IdleUnloader(
-      async () => (await this.config.getInt('TTS_IDLE_UNLOAD_MINUTES')) * 60_000,
+      async () =>
+        (await this.config.getInt('TTS_IDLE_UNLOAD_MINUTES')) * 60_000,
       () => this.engine.unload(),
     );
   }
@@ -42,7 +49,9 @@ export class TtsService {
   }
 
   async urlsFor(specs: (TtsSpec | null)[]): Promise<(string | null)[]> {
-    const ids = specs.map((s) => (s?.segments.length ? clipId(s.segments) : null));
+    const ids = specs.map((s) =>
+      s?.segments.length ? clipId(s.segments) : null,
+    );
     const rows = new Map<string, TtsSegment[]>();
     ids.forEach((id, i) => id && rows.set(id, specs[i]!.segments));
     if (!rows.size) return ids.map(() => null);
@@ -71,25 +80,31 @@ export class TtsService {
   async ensureFile(id: string): Promise<string | null> {
     const clip = await this.prisma.ttsClip.findUnique({ where: { id } });
     if (!clip) return null;
-    if (clip.fileName && (await this.storage.exists(clip.fileName))) return clip.fileName;
+    if (clip.fileName && (await this.storage.exists(clip.fileName)))
+      return clip.fileName;
     if ((await this.config.getInt('TTS_ENABLED')) !== 1)
       throw new ServiceUnavailableException('Audio TTS sedang dinonaktifkan');
     let job = this.inflight.get(id);
     if (!job) {
-      job = this.synthesize(id, clip.segments as unknown as TtsSegment[]).finally(() =>
-        this.inflight.delete(id),
-      );
+      job = this.synthesize(
+        id,
+        clip.segments as unknown as TtsSegment[],
+      ).finally(() => this.inflight.delete(id));
       this.inflight.set(id, job);
     }
     return job;
   }
 
-  private async synthesize(id: string, segments: TtsSegment[]): Promise<string> {
+  private async synthesize(
+    id: string,
+    segments: TtsSegment[],
+  ): Promise<string> {
     try {
       return await this.withSlot(() =>
         this.idle.run(async () => {
           const parts: PcmAudio[] = [];
-          for (const seg of segments) parts.push(await this.engine.synthesize(seg));
+          for (const seg of segments)
+            parts.push(await this.engine.synthesize(seg));
           const { buf, durationMs } = encodeMp3(joinSegments(parts));
           const fileName = `tts-${id}.mp3`;
           await this.storage.put(fileName, buf);
@@ -108,7 +123,8 @@ export class TtsService {
 
   private async withSlot<T>(fn: () => Promise<T>): Promise<T> {
     const max = Math.max(1, await this.config.getInt('TTS_MAX_PARALLEL'));
-    while (this.running >= max) await new Promise<void>((r) => this.waiting.push(r));
+    while (this.running >= max)
+      await new Promise<void>((r) => this.waiting.push(r));
     this.running++;
     try {
       return await fn();

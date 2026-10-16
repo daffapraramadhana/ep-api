@@ -2,7 +2,9 @@ import { clipId, parseTtsScript, speakableText } from './tts-text';
 
 describe('speakableText', () => {
   it('alternatif " / " jadi jeda koma', () => {
-    expect(speakableText('Hey! / Hi there! / Hiya!')).toBe('Hey!, Hi there!, Hiya!');
+    expect(speakableText('Hey! / Hi there! / Hiya!')).toBe(
+      'Hey!, Hi there!, Hiya!',
+    );
   });
 
   it('buang penanda Markdown inline dan rapikan spasi', () => {
@@ -28,7 +30,9 @@ describe('parseTtsScript', () => {
   });
 
   it('dialog dua pembicara → suara kiri lalu kanan, nama dibuang', () => {
-    expect(parseTtsScript('Rina (Tour Leader): Hello!\nMr. Lee: Hi, Rina.')).toEqual({
+    expect(
+      parseTtsScript('Rina (Tour Leader): Hello!\nMr. Lee: Hi, Rina.'),
+    ).toEqual({
       segments: [
         { voice: 'af_heart', text: 'Hello!' },
         { voice: 'am_michael', text: 'Hi, Rina.' },
@@ -74,6 +78,8 @@ describe('clipId', () => {
 
   it('berubah bila suara atau teks berubah', () => {
     expect(clipId([{ ...seg[0], voice: 'am_michael' }])).not.toBe(clipId(seg));
-    expect(clipId([{ ...seg[0], text: 'How was your trip here?' }])).not.toBe(clipId(seg));
+    expect(clipId([{ ...seg[0], text: 'How was your trip here?' }])).not.toBe(
+      clipId(seg),
+    );
   });
 });

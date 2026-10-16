@@ -5,7 +5,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import { AppConfigService } from '../common/config.service';
 import { LessonProgress, SessionService } from '../session/session.service';
-import { resolveBlocks } from './blocks';
+import { attachChapterAudio, resolveBlocks } from './blocks';
+import { TtsService } from '../tts/tts.service';
 import type { StoredBlock } from './chapter-parser';
 import type {
   ChapterView,
@@ -37,6 +38,7 @@ export class ModulesService {
     private storage: StorageService,
     private config: AppConfigService,
     private session: SessionService,
+    private tts: TtsService,
   ) {}
 
   /** Modul LIVE yang punya ≥1 bab — satu-satunya yang boleh dilihat user. */
@@ -196,9 +198,9 @@ export class ModulesService {
       position: idx + 1,
       title: ch.title,
       estMinutes: ch.estMinutes,
-      blocks: resolveBlocks(
-        ch.blocks as unknown as StoredBlock[],
-        this.storage,
+      blocks: await attachChapterAudio(
+        resolveBlocks(ch.blocks as unknown as StoredBlock[], this.storage),
+        this.tts,
       ),
       quiz,
       prevOrder: m.chapters[idx - 1]?.order ?? null,

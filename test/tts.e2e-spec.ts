@@ -44,7 +44,10 @@ describe('TTS: urlsFor + GET /tts/:id.mp3', () => {
   }
 
   async function setEnabled(v: '0' | '1') {
-    await prisma.config.update({ where: { key: 'TTS_ENABLED' }, data: { value: v } });
+    await prisma.config.update({
+      where: { key: 'TTS_ENABLED' },
+      data: { value: v },
+    });
     config.clearCache();
   }
 
@@ -69,13 +72,16 @@ describe('TTS: urlsFor + GET /tts/:id.mp3', () => {
   afterAll(async () => {
     await setEnabled('1');
     await prisma.ttsClip.deleteMany({ where: { id: { in: ids } } });
-    for (const id of ids) await fs.rm(path.join(storageDir, `tts-${id}.mp3`), { force: true });
+    for (const id of ids)
+      await fs.rm(path.join(storageDir, `tts-${id}.mp3`), { force: true });
     await app.close();
   });
 
   it('nama file tidak valid atau id tak terdaftar → 404', async () => {
     await request(app.getHttpServer()).get('/tts/zz.mp3').expect(404);
-    await request(app.getHttpServer()).get(`/tts/${'a'.repeat(32)}.mp3`).expect(404);
+    await request(app.getHttpServer())
+      .get(`/tts/${'a'.repeat(32)}.mp3`)
+      .expect(404);
   });
 
   it('urlsFor: URL untuk spec, null untuk null; mendaftar sekali', async () => {
@@ -122,7 +128,10 @@ describe('TTS: urlsFor + GET /tts/:id.mp3', () => {
 
   it('Range pada klip yang baru disintesis → 206 (iOS Safari)', async () => {
     const url = await register(spec('Range request'));
-    await request(app.getHttpServer()).get(url).set('Range', 'bytes=0-99').expect(206);
+    await request(app.getHttpServer())
+      .get(url)
+      .set('Range', 'bytes=0-99')
+      .expect(206);
   });
 
   it('sintesis gagal → 503 tanpa fileName, request berikutnya mencoba lagi', async () => {
@@ -130,7 +139,9 @@ describe('TTS: urlsFor + GET /tts/:id.mp3', () => {
     const id = url.slice(5, 37);
     fake.failNext = 1;
     await request(app.getHttpServer()).get(url).expect(503);
-    expect((await prisma.ttsClip.findUniqueOrThrow({ where: { id } })).fileName).toBeNull();
+    expect(
+      (await prisma.ttsClip.findUniqueOrThrow({ where: { id } })).fileName,
+    ).toBeNull();
     await request(app.getHttpServer()).get(url).expect(200);
   });
 
@@ -151,7 +162,10 @@ describe('TTS: urlsFor + GET /tts/:id.mp3', () => {
     const calls = fake.calls.length;
     await request(app.getHttpServer()).get(url).expect(200);
     expect(fake.calls.length).toBe(calls + 2);
-    expect(fake.calls.slice(-2).map((c) => c.voice)).toEqual(['af_heart', 'am_michael']);
+    expect(fake.calls.slice(-2).map((c) => c.voice)).toEqual([
+      'af_heart',
+      'am_michael',
+    ]);
   });
 
   it('TTS_ENABLED=0: klip jadi tetap dilayani, klip belum jadi → null/503', async () => {
@@ -162,7 +176,10 @@ describe('TTS: urlsFor + GET /tts/:id.mp3', () => {
     const pending = await register(pendingSpec);
     await setEnabled('0');
     try {
-      expect(await tts.urlsFor([readySpec, pendingSpec])).toEqual([ready, null]);
+      expect(await tts.urlsFor([readySpec, pendingSpec])).toEqual([
+        ready,
+        null,
+      ]);
       await request(app.getHttpServer()).get(ready).expect(200);
       await request(app.getHttpServer()).get(pending).expect(503);
     } finally {
