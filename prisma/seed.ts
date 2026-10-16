@@ -16,6 +16,10 @@ const CONFIG: Record<string, string> = {
   VOICE_MIN_DURATION_SECS: '60',
   VOICE_MIN_USER_TURNS: '4',
   XP_VOICE_CONVERSATION: '40', // 2 × XP_SESSION_COMPLETE (20)
+  // Audio TTS (Kokoro) — saklar darurat, batas sintesis paralel, idle lepas model.
+  TTS_ENABLED: '1',
+  TTS_MAX_PARALLEL: '1',
+  TTS_IDLE_UNLOAD_MINUTES: '10',
 };
 
 async function main() {

@@ -131,6 +131,7 @@ model Item {
   explanation     String
   mediaFile       String?
   passage         String?
+  ttsText         String?
   order           Int
   status          ContentStatus @default(DRAFT)
   createdAt       DateTime @default(now())
@@ -211,6 +212,17 @@ model ItemReport {
 model Config {
   key   String @id
   value String
+}
+
+/// Klip audio TTS content-addressed (spec audio-tts §4). id = 32 hex pertama
+/// sha256(ENGINE_ID + JSON(segments)); fileName null = belum disintesis.
+model TtsClip {
+  id          String    @id
+  segments    Json
+  fileName    String?
+  durationMs  Int?
+  createdAt   DateTime  @default(now())
+  generatedAt DateTime?
 }
 
 model StreakFreeze {
