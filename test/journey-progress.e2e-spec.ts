@@ -212,7 +212,7 @@ describe('Journey / Progress / Item Report (Task 6)', () => {
     const topicGreet = `P2D-Greetings-${stamp}`;
     const topicFam = `P2D-Family-${stamp}`;
 
-    it('topics diurutkan by min lesson order; states & accuracy sesuai aturan global order', async () => {
+    it('unit topik diurutkan by min lesson order; states & accuracy sesuai urutan jalur', async () => {
       const user = await makeUser(
         'P2D Journey User',
         `p2d-journey-${stamp}@ex.com`,
@@ -246,9 +246,9 @@ describe('Journey / Progress / Item Report (Task 6)', () => {
       await makeAttempt(user.id, i3a.id, session.id, false, true);
       const lessonGreet2Id = l3.id;
 
-      // L4: Family, order 104 — fully done, BUT comes after the 'now'
-      // lesson in global order -> state must still be 'locked', and
-      // accuracy must be null even though it is actually done.
+      // L4: Family, order 104 — fully done and comes after the 'now'
+      // lesson -> still 'done' with its accuracy (spec satu-perjalanan:
+      // langkah selesai selalu done, di mana pun posisinya).
       const l4 = await makeLesson(`P2D-F2-${stamp}`, topicFam, 104);
       const i4a = await makeItem(l4.id, 1);
       await makeAttempt(user.id, i4a.id, session.id, true, true);
@@ -264,10 +264,10 @@ describe('Journey / Progress / Item Report (Task 6)', () => {
       async function requestJourneyConverged() {
         let last = await get('/journey', user.token).expect(200);
         for (let attempt = 0; attempt < 2; attempt++) {
-          const greetSoFar = last.body.topics.find(
-            (t: any) => t.topic === topicGreet,
+          const greetSoFar = last.body.units.find(
+            (t: any) => t.title === topicGreet,
           );
-          const g1SoFar = greetSoFar?.lessons.find(
+          const g1SoFar = greetSoFar?.steps.find(
             (l: any) => l.id === lessonGreet1Id,
           );
           if (g1SoFar?.state === 'done') break;
@@ -290,7 +290,7 @@ describe('Journey / Progress / Item Report (Task 6)', () => {
       ]);
       const res = await requestJourneyConverged();
 
-      const topicNames: string[] = res.body.topics.map((t: any) => t.topic);
+      const topicNames: string[] = res.body.units.map((t: any) => t.title);
       // Only assert the RELATIVE order of our own two topics — other
       // concurrently-live DASAR topics (from other e2e files) may also be
       // present in the response and are irrelevant here.
@@ -302,9 +302,9 @@ describe('Journey / Progress / Item Report (Task 6)', () => {
       );
       expect(ourTopicIndexes.every((i) => i >= 0)).toBe(true);
 
-      const greet = res.body.topics.find((t: any) => t.topic === topicGreet);
+      const greet = res.body.units.find((t: any) => t.title === topicGreet);
       expect(
-        greet.lessons.map((l: any) => ({
+        greet.steps.map((l: any) => ({
           id: l.id,
           state: l.state,
           accuracy: l.accuracy,
@@ -314,16 +314,16 @@ describe('Journey / Progress / Item Report (Task 6)', () => {
         { id: lessonGreet2Id, state: 'now', accuracy: null },
       ]);
 
-      const fam = res.body.topics.find((t: any) => t.topic === topicFam);
+      const fam = res.body.units.find((t: any) => t.title === topicFam);
       expect(
-        fam.lessons.map((l: any) => ({
+        fam.steps.map((l: any) => ({
           id: l.id,
           state: l.state,
           accuracy: l.accuracy,
         })),
       ).toEqual([
         { id: lessonFam1Id, state: 'done', accuracy: 50 },
-        { id: lessonFam2Id, state: 'locked', accuracy: null },
+        { id: lessonFam2Id, state: 'done', accuracy: 100 },
       ]);
     });
   });

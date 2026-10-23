@@ -1,25 +1,38 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionService } from '../session/session.service';
-import { PATH_LESSON } from '../common/content-scope';
 
-type LessonState = 'done' | 'now' | 'locked';
+export type JourneyStepState = 'done' | 'now' | 'locked';
 
-export interface JourneyLessonView {
-  id: string;
-  title: string;
-  order: number;
-  state: LessonState;
+export interface JourneyStepView {
+  kind: 'lesson' | 'chapter' | 'reading';
+  id: string; // lessonId (lesson/chapter) | chapterId (reading)
+  title: string; // judul lesson | judul bab
+  state: JourneyStepState | null; // null untuk reading
   accuracy: number | null; // first-try %, done saja
+  itemCount: number; // 0 untuk reading
+  chapter: {
+    moduleSlug: string;
+    chapterId: string;
+    order: number;
+    position: number;
+    estMinutes: number;
+  } | null;
 }
 
-export interface JourneyTopicView {
-  topic: string;
-  lessons: JourneyLessonView[];
+export interface JourneyUnitView {
+  kind: 'topic' | 'module';
+  title: string;
+  moduleSlug: string | null;
+  done: number; // langkah dihitung saja (lesson/chapter)
+  total: number;
+  steps: JourneyStepView[];
 }
 
 export interface JourneyView {
-  topics: JourneyTopicView[];
+  units: JourneyUnitView[];
+  done: number;
+  total: number;
 }
 
 @Injectable()
@@ -30,100 +43,152 @@ export class JourneyService {
   ) {}
 
   /**
-   * One lessons query (LIVE at the user's level, with LIVE items) + one
-   * attempts query (this user's firstTry-correct answers among those
-   * items) — done/now/locked and accuracy are all computed in memory from
-   * those two result sets plus the shared `lessonCompletion` map (itself
-   * one more lessons query + one more attempts query, encapsulated in
-   * SessionService and reused here via SessionModule's export). No
-   * per-lesson queries.
+   * Perjalanan per unit (spec satu-perjalanan §5.1–5.2). Unit & urutan dari
+   * `SessionService.path()` — sumber yang sama dengan mesin sesi, jadi
+   * Beranda/Perjalanan/sesi harian tak pernah menunjuk langkah berbeda.
+   * Status: selesai → selalu `done` (di mana pun posisinya); langkah pertama
+   * yang belum selesai → `now`; sisanya `locked`. Bab bacaan (tanpa kuis
+   * jalur) tampil di unit modulnya tanpa dihitung. Query: path (2) +
+   * attempt firstTry (1) + bab modul (1), tanpa N+1.
    */
   async get(userId: string): Promise<JourneyView> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { level: true },
     });
-    if (!user?.level) return { topics: [] };
+    if (!user?.level) return { units: [], done: 0, total: 0 };
 
-    const lessons = await this.prisma.lesson.findMany({
-      where: { level: user.level, status: 'LIVE', ...PATH_LESSON },
-      orderBy: { order: 'asc' },
-      include: { items: { where: { status: 'LIVE' }, select: { id: true } } },
-    });
-    if (!lessons.length) return { topics: [] };
+    const { units, lessons, done } = await this.session.path(
+      userId,
+      user.level,
+    );
+    if (!lessons.length) return { units: [], done: 0, total: 0 };
 
-    const doneMap = await this.session.lessonCompletion(userId, user.level);
+    const nowId = lessons.find((l) => !done.get(l.id))?.id ?? null;
 
-    const allItemIds = lessons.flatMap((l) => l.items.map((i) => i.id));
-    const firstTryCorrect = allItemIds.length
-      ? await this.prisma.attempt.findMany({
+    const firstTryCorrect = new Set(
+      (
+        await this.prisma.attempt.findMany({
           where: {
             userId,
-            itemId: { in: allItemIds },
+            itemId: { in: lessons.flatMap((l) => l.items.map((i) => i.id)) },
             firstTry: true,
             correct: true,
           },
           select: { itemId: true },
         })
+      ).map((a) => a.itemId),
+    );
+
+    const moduleIds = units.flatMap((u) => (u.moduleId ? [u.moduleId] : []));
+    const chapters = moduleIds.length
+      ? await this.prisma.moduleChapter.findMany({
+          where: { moduleId: { in: moduleIds } },
+          orderBy: { order: 'asc' },
+          select: {
+            id: true,
+            moduleId: true,
+            order: true,
+            title: true,
+            estMinutes: true,
+            lessonId: true,
+            lesson: {
+              select: {
+                status: true,
+                items: {
+                  where: { status: 'LIVE' },
+                  select: { id: true },
+                  take: 1,
+                },
+              },
+            },
+          },
+        })
       : [];
-    const firstTryCorrectSet = new Set(firstTryCorrect.map((a) => a.itemId));
 
-    // Assign state walking the GLOBAL level order (not per-topic): every
-    // lesson before the first not-done one is 'done', the first not-done
-    // one is 'now', and everything after that — regardless of its own
-    // completion status — is 'locked'.
-    let seenNow = false;
-    const lessonViewById = new Map<string, JourneyLessonView>();
-    for (const l of lessons) {
-      const done = doneMap.get(l.id) ?? false;
-      let state: LessonState;
-      if (!seenNow) {
-        if (done) {
-          state = 'done';
-        } else {
-          state = 'now';
-          seenNow = true;
-        }
-      } else {
-        state = 'locked';
-      }
-
-      const accuracy =
-        state === 'done' && l.items.length > 0
+    const lessonStep = (
+      l: (typeof lessons)[number],
+    ): Pick<JourneyStepView, 'state' | 'accuracy' | 'itemCount'> => {
+      const isDone = done.get(l.id) ?? false;
+      return {
+        state: isDone ? 'done' : l.id === nowId ? 'now' : 'locked',
+        accuracy: isDone
           ? Math.round(
-              (l.items.filter((i) => firstTryCorrectSet.has(i.id)).length /
+              (l.items.filter((i) => firstTryCorrect.has(i.id)).length /
                 l.items.length) *
                 100,
             )
-          : null;
+          : null,
+        itemCount: l.items.length,
+      };
+    };
 
-      lessonViewById.set(l.id, {
-        id: l.id,
-        title: l.title,
-        order: l.order,
-        state,
-        accuracy,
-      });
-    }
-
-    // Group into topics. Since `lessons` is already sorted by order asc,
-    // the first-seen order of each topic name is exactly that topic's
-    // minimum lesson order.
-    const topicOrder: string[] = [];
-    const topicLessons = new Map<string, JourneyLessonView[]>();
-    for (const l of lessons) {
-      if (!topicLessons.has(l.topic)) {
-        topicLessons.set(l.topic, []);
-        topicOrder.push(l.topic);
+    const view: JourneyUnitView[] = units.map((u) => {
+      let steps: JourneyStepView[];
+      if (u.kind === 'topic') {
+        steps = u.lessons.map((l) => ({
+          kind: 'lesson',
+          id: l.id,
+          title: l.title,
+          ...lessonStep(l),
+          chapter: null,
+        }));
+      } else {
+        const byLesson = new Map(u.lessons.map((l) => [l.id, l]));
+        const modChapters = chapters.filter((c) => c.moduleId === u.moduleId);
+        steps = modChapters.flatMap((c, i): JourneyStepView[] => {
+          const chapter = {
+            moduleSlug: u.moduleSlug!,
+            chapterId: c.id,
+            order: c.order,
+            position: i + 1,
+            estMinutes: c.estMinutes,
+          };
+          const l = c.lessonId ? byLesson.get(c.lessonId) : undefined;
+          if (l)
+            return [
+              {
+                kind: 'chapter',
+                id: l.id,
+                title: c.title,
+                ...lessonStep(l),
+                chapter,
+              },
+            ];
+          const quizless =
+            !c.lesson ||
+            c.lesson.status !== 'LIVE' ||
+            c.lesson.items.length === 0;
+          // Kuis jalur di level lain → bukan bacaan; tampil di level itu.
+          if (!quizless) return [];
+          return [
+            {
+              kind: 'reading',
+              id: c.id,
+              title: c.title,
+              state: null,
+              accuracy: null,
+              itemCount: 0,
+              chapter,
+            },
+          ];
+        });
       }
-      topicLessons.get(l.topic)!.push(lessonViewById.get(l.id)!);
-    }
+      const counted = steps.filter((s) => s.kind !== 'reading');
+      return {
+        kind: u.kind,
+        title: u.title,
+        moduleSlug: u.moduleSlug,
+        done: counted.filter((s) => s.state === 'done').length,
+        total: counted.length,
+        steps,
+      };
+    });
 
-    const topics: JourneyTopicView[] = topicOrder.map((topic) => ({
-      topic,
-      lessons: topicLessons.get(topic)!.sort((a, b) => a.order - b.order),
-    }));
-
-    return { topics };
+    return {
+      units: view,
+      done: view.reduce((n, u) => n + u.done, 0),
+      total: view.reduce((n, u) => n + u.total, 0),
+    };
   }
 }

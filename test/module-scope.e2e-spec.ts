@@ -231,11 +231,19 @@ describe('cakupan modul (PATH_LESSON & COUNTED_SESSION_KINDS)', () => {
 
   it('/journey memuat lesson bab modul LIVE', async () => {
     const res = await get('/journey', token).expect(200);
-    const ids = res.body.topics.flatMap((t: any) =>
-      t.lessons.map((l: any) => l.id),
+    const ids = res.body.units.flatMap((u: any) =>
+      u.steps.map((st: any) => st.id),
     );
     expect(ids).toContain(pathLessonId);
     expect(ids).toContain(moduleLessonId);
+    const unit = res.body.units.find(
+      (u: any) => u.moduleSlug === `msc-${stamp}`,
+    );
+    expect(unit.kind).toBe('module');
+    expect(unit.steps[0]).toMatchObject({
+      kind: 'chapter',
+      id: moduleLessonId,
+    });
   });
 
   it('summary.nextLesson = lesson bab modul bila itu langkah berikutnya', async () => {
@@ -278,8 +286,8 @@ describe('cakupan modul (PATH_LESSON & COUNTED_SESSION_KINDS)', () => {
 
   it('lesson yang ditautkan ke modul DRAFT tetap di /journey', async () => {
     const res = await get('/journey', token).expect(200);
-    const ids = res.body.topics.flatMap((t: any) =>
-      t.lessons.map((l: any) => l.id),
+    const ids = res.body.units.flatMap((u: any) =>
+      u.steps.map((st: any) => st.id),
     );
     expect(ids).toContain(draftLinkedLessonId);
   });

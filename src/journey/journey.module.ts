@@ -8,5 +8,6 @@ import { JourneyService } from './journey.service';
   imports: [AuthModule, SessionModule],
   controllers: [JourneyController],
   providers: [JourneyService],
+  exports: [JourneyService],
 })
 export class JourneyModule {}
