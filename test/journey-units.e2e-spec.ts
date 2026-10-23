@@ -9,6 +9,7 @@ import request from 'supertest';
 import * as bcrypt from 'bcrypt';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { todayWIB } from '../src/common/wib';
 
 const PASSWORD = 'Password123!';
 
@@ -405,5 +406,56 @@ describe('Perjalanan berbentuk unit (satu Perjalanan)', () => {
     const res = await get('/me/summary', u.token).expect(200);
     expect(res.body.nextLesson).toBeNull();
     expect(res.body.contentExhausted).toBe(true);
+  });
+
+  it('sesi SPEAKING terbuka tampil dengan kind SPEAKING (Beranda melanjutkannya, bukan sesi harian)', async () => {
+    const u = await user('openspeak');
+    const s = await prisma.session.create({
+      data: { userId: u.id, date: todayWIB(), kind: 'SPEAKING' },
+    });
+    await prisma.sessionItem.create({
+      data: { sessionId: s.id, itemId: ids.a1Item, source: 'LESSON', order: 0 },
+    });
+    const res = await get('/me/summary', u.token).expect(200);
+    expect(res.body.openSession).toMatchObject({
+      kind: 'SPEAKING',
+      moduleChapterId: null,
+    });
+  });
+
+  it('DAILY diutamakan atas SPEAKING yang juga terbuka', async () => {
+    const u = await user('dailyspeak');
+    const s = await prisma.session.create({
+      data: { userId: u.id, date: todayWIB(), kind: 'SPEAKING' },
+    });
+    await prisma.sessionItem.create({
+      data: { sessionId: s.id, itemId: ids.a1Item, source: 'LESSON', order: 0 },
+    });
+    await request(app.getHttpServer())
+      .post('/session/today')
+      .set('Authorization', `Bearer ${u.token}`)
+      .expect(201);
+    for (let i = 0; i < 3; i++) {
+      const res = await get('/me/summary', u.token).expect(200);
+      expect(res.body.openSession.kind).toBe('DAILY');
+    }
+  });
+
+  it('sesi MODULE yang modulnya tak lagi LIVE tidak ditawarkan untuk dilanjutkan', async () => {
+    const u = await user('retiredmod');
+    const l = await lesson('D1', 9000);
+    const mod = await module(`ju-d-${stamp}`, 'LIVE');
+    const ch = await chapter(mod.id, 1, l.id);
+    await request(app.getHttpServer())
+      .post('/session/module')
+      .set('Authorization', `Bearer ${u.token}`)
+      .send({ chapterId: ch.id })
+      .expect(201);
+    await prisma.module.update({
+      where: { id: mod.id },
+      data: { status: 'RETIRED' },
+    });
+    const res = await get('/me/summary', u.token).expect(200);
+    expect(res.body.openSession).toBeNull();
   });
 });

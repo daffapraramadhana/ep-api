@@ -31,6 +31,8 @@ export interface OpenSessionView {
   /** soal yang sudah terjawab benar (semantik segmen sesi) */
   answered: number;
   total: number;
+  /** jenis sesi — Beranda melanjutkan lewat jalur yang sama dengan asalnya */
+  kind: 'DAILY' | 'SPEAKING' | 'MODULE';
   /** terisi hanya untuk sesi kuis bab (MODULE) — Beranda melanjutkannya */
   moduleChapterId: string | null;
 }
@@ -155,21 +157,25 @@ export class SummaryService {
 
   /**
    * Sesi hari ini yang IN_PROGRESS (beku) — untuk CTA "LANJUTKAN".
-   * DAILY/SPEAKING diutamakan; sesi kuis bab (MODULE) hanya bila tak ada
-   * yang lain (spec satu-perjalanan §5.5).
+   * Prioritas tetap: DAILY → SPEAKING → MODULE (spec satu-perjalanan §5.5).
+   * Sesi MODULE yang modulnya tak lagi LIVE dilewati — POST /session/module
+   * akan 404, jadi jangan tawarkan untuk dilanjutkan.
    */
   private async getOpenSession(
     userId: string,
     today: Date,
   ): Promise<OpenSessionView | null> {
-    const find = (kinds: ('DAILY' | 'SPEAKING' | 'MODULE')[]) =>
+    const find = (kind: OpenSessionView['kind']) =>
       this.prisma.session.findFirst({
         where: {
           userId,
           date: today,
-          kind: { in: kinds },
+          kind,
           status: 'IN_PROGRESS',
           items: { some: {} },
+          ...(kind === 'MODULE'
+            ? { moduleChapter: { is: { module: { status: 'LIVE' } } } }
+            : {}),
         },
         include: {
           items: {
@@ -183,7 +189,9 @@ export class SummaryService {
         },
       });
     const open =
-      (await find(['DAILY', 'SPEAKING'])) ?? (await find(['MODULE']));
+      (await find('DAILY')) ??
+      (await find('SPEAKING')) ??
+      (await find('MODULE'));
     if (!open) return null;
     const correctIds = new Set(open.attempts.map((a) => a.itemId));
     const firstLessonSlot = open.items.find((si) => si.source === 'LESSON');
@@ -192,6 +200,7 @@ export class SummaryService {
         open.moduleChapter?.title ?? firstLessonSlot?.item.lesson.title ?? null,
       answered: open.items.filter((si) => correctIds.has(si.itemId)).length,
       total: open.items.length,
+      kind: open.kind as OpenSessionView['kind'],
       moduleChapterId: open.moduleChapter?.id ?? null,
     };
   }
