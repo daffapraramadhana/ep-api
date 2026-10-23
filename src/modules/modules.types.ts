@@ -53,11 +53,3 @@ export interface ChapterView {
   moduleSlug: string;
   moduleTitle: string;
 }
-
-export interface ModuleInProgressView {
-  slug: string;
-  title: string;
-  nextOrder: number;
-  nextPosition: number;
-  nextTitle: string;
-}

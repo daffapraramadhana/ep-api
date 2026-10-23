@@ -324,15 +324,9 @@ describe('modul untuk user', () => {
     });
   });
 
-  it('summary.moduleInProgress menunjuk bab berikutnya', async () => {
+  it('summary tidak lagi punya moduleInProgress (satu Perjalanan)', async () => {
     const res = await get('/me/summary').expect(200);
-    expect(res.body.moduleInProgress).toEqual({
-      slug: slugA,
-      title: 'MUS A',
-      nextOrder: 2,
-      nextPosition: 2,
-      nextTitle: 'Dua',
-    });
+    expect(res.body).not.toHaveProperty('moduleInProgress');
   });
 
   it('posisi bab (1-based) dipakai untuk label, bukan order', async () => {

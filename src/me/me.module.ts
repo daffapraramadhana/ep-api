@@ -1,13 +1,13 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
 import { SessionModule } from '../session/session.module';
-import { ModulesModule } from '../modules/modules.module';
+import { JourneyModule } from '../journey/journey.module';
 import { MeController } from './me.controller';
 import { StreakService } from './streak.service';
 import { SummaryService } from './summary.service';
 
 @Module({
-  imports: [AuthModule, SessionModule, ModulesModule],
+  imports: [AuthModule, SessionModule, JourneyModule],
   controllers: [MeController],
   providers: [StreakService, SummaryService],
 })

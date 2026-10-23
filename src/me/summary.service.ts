@@ -1,29 +1,38 @@
 import { Injectable } from '@nestjs/common';
-import { Level } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppConfigService } from '../common/config.service';
-import { SessionService } from '../session/session.service';
 import { StreakService } from './streak.service';
-import { ModulesService } from '../modules/modules.service';
-import type { ModuleInProgressView } from '../modules/modules.types';
+import { JourneyService } from '../journey/journey.service';
 import { todayWIB, weekStartWIB } from '../common/wib';
-import { COUNTED_SESSION_KINDS, PATH_LESSON } from '../common/content-scope';
+import { COUNTED_SESSION_KINDS } from '../common/content-scope';
 
+/** Langkah `now` Perjalanan (spec satu-perjalanan §5.5) — pelajaran atau bab modul. */
 export interface NextLessonView {
-  id: string;
-  title: string;
-  topic: string;
+  id: string; // lessonId
+  title: string; // judul lesson | judul bab
+  topic: string; // judul unit
   itemCount: number;
   estMinutes: number;
   xpEstimate: number;
+  kind: 'lesson' | 'chapter';
+  unit: { position: number; title: string };
+  chapter: {
+    moduleSlug: string;
+    chapterId: string;
+    order: number;
+    position: number;
+  } | null;
 }
 
 export interface OpenSessionView {
-  /** judul lesson slot LESSON pertama; null utk sesi penguatan/replay campuran */
+  /** judul lesson slot LESSON pertama (MODULE: judul bab); null utk sesi
+   *  penguatan/replay campuran */
   lessonTitle: string | null;
   /** soal yang sudah terjawab benar (semantik segmen sesi) */
   answered: number;
   total: number;
+  /** terisi hanya untuk sesi kuis bab (MODULE) — Beranda melanjutkannya */
+  moduleChapterId: string | null;
 }
 
 export interface SummaryView {
@@ -36,14 +45,12 @@ export interface SummaryView {
   reviewsDue: number;
   contentExhausted: boolean;
   nextLesson: NextLessonView | null;
-  /** sesi DAILY hari ini yang masih berjalan — Beranda menampilkan
-   *  "LANJUTKAN" alih-alih menawarkan lesson baru. */
+  /** sesi hari ini yang masih berjalan (DAILY/SPEAKING, lalu MODULE) —
+   *  Beranda menampilkan "LANJUTKAN" alih-alih menawarkan langkah baru. */
   openSession: OpenSessionView | null;
   /** talking agent aktif (config VOICE_AGENT_ENABLED) — web memakai ini
    *  utk menampilkan/menyembunyikan kartu "Ngobrol dengan AI" tanpa deploy. */
   voiceAgentEnabled: boolean;
-  /** modul yang sedang berjalan — kartu kecil "Lanjutkan modul" di Beranda. */
-  moduleInProgress: ModuleInProgressView | null;
 }
 
 @Injectable()
@@ -51,9 +58,8 @@ export class SummaryService {
   constructor(
     private prisma: PrismaService,
     private config: AppConfigService,
-    private session: SessionService,
     private streak: StreakService,
-    private modules: ModulesService,
+    private journey: JourneyService,
   ) {}
 
   async get(userId: string): Promise<SummaryView> {
@@ -109,7 +115,7 @@ export class SummaryService {
       this.config.getInt('XP_SESSION_COMPLETE'),
       this.config.getInt('XP_PERFECT_SESSION'),
       this.config.getInt('VOICE_AGENT_ENABLED'),
-      this.getNextLesson(userId, user.level),
+      this.getNextLesson(userId),
     ]);
 
     // XP talking agent (XP_VOICE_CONVERSATION) adalah suku ketiga independen —
@@ -122,11 +128,7 @@ export class SummaryService {
 
     const nextLessonView: NextLessonView | null = nextLesson
       ? {
-          id: nextLesson.id,
-          title: nextLesson.title,
-          topic: nextLesson.topic,
-          itemCount: nextLesson.itemCount,
-          estMinutes: Math.ceil(nextLesson.itemCount * 0.75),
+          ...nextLesson,
           xpEstimate:
             nextLesson.itemCount * xpFirstTry +
             xpSessionComplete +
@@ -135,7 +137,6 @@ export class SummaryService {
       : null;
 
     const openSession = await this.getOpenSession(userId, today);
-    const moduleInProgress = await this.modules.inProgressSummary(userId);
 
     return {
       name: user.name,
@@ -149,82 +150,83 @@ export class SummaryService {
       nextLesson: nextLessonView,
       openSession,
       voiceAgentEnabled: voiceAgentEnabled === 1,
-      moduleInProgress,
     };
   }
 
   /**
-   * First not-yet-completed LIVE lesson at the user's level, ordered like
-   * SessionService's own (private) nextLesson pick — reusing its exported
-   * `lessonCompletion` helper for the per-user done/not-done map so the two
-   * stay consistent, plus this method's own itemCount for the estimate.
+   * Sesi hari ini yang IN_PROGRESS (beku) — untuk CTA "LANJUTKAN".
+   * DAILY/SPEAKING diutamakan; sesi kuis bab (MODULE) hanya bila tak ada
+   * yang lain (spec satu-perjalanan §5.5).
    */
-  /** Sesi DAILY hari ini yang IN_PROGRESS (beku) — untuk CTA "LANJUTKAN". */
   private async getOpenSession(
     userId: string,
     today: Date,
   ): Promise<OpenSessionView | null> {
-    const open = await this.prisma.session.findFirst({
-      // Sengaja BUKAN COUNTED_SESSION_KINDS: sesi kuis bab dilanjutkan dari halaman modul.
-      where: {
-        userId,
-        date: today,
-        kind: { in: ['DAILY', 'SPEAKING'] },
-        status: 'IN_PROGRESS',
-      },
-      include: {
-        items: {
-          orderBy: { order: 'asc' },
-          include: {
-            item: { select: { lesson: { select: { title: true } } } },
-          },
+    const find = (kinds: ('DAILY' | 'SPEAKING' | 'MODULE')[]) =>
+      this.prisma.session.findFirst({
+        where: {
+          userId,
+          date: today,
+          kind: { in: kinds },
+          status: 'IN_PROGRESS',
+          items: { some: {} },
         },
-        attempts: { where: { correct: true }, select: { itemId: true } },
-      },
-    });
-    if (!open || open.items.length === 0) return null;
+        include: {
+          items: {
+            orderBy: { order: 'asc' },
+            include: {
+              item: { select: { lesson: { select: { title: true } } } },
+            },
+          },
+          attempts: { where: { correct: true }, select: { itemId: true } },
+          moduleChapter: { select: { id: true, title: true } },
+        },
+      });
+    const open =
+      (await find(['DAILY', 'SPEAKING'])) ?? (await find(['MODULE']));
+    if (!open) return null;
     const correctIds = new Set(open.attempts.map((a) => a.itemId));
     const firstLessonSlot = open.items.find((si) => si.source === 'LESSON');
     return {
-      lessonTitle: firstLessonSlot?.item.lesson.title ?? null,
+      lessonTitle:
+        open.moduleChapter?.title ?? firstLessonSlot?.item.lesson.title ?? null,
       answered: open.items.filter((si) => correctIds.has(si.itemId)).length,
       total: open.items.length,
+      moduleChapterId: open.moduleChapter?.id ?? null,
     };
   }
 
+  /**
+   * Langkah `now` dari /journey — sumber yang sama dengan Perjalanan, jadi
+   * Beranda tak pernah menunjuk langkah lain. xpEstimate diisi pemanggil.
+   */
   private async getNextLesson(
     userId: string,
-    level: Level | null,
-  ): Promise<{
-    id: string;
-    title: string;
-    topic: string;
-    itemCount: number;
-  } | null> {
-    if (!level) return null;
-
-    const lessons = await this.prisma.lesson.findMany({
-      where: { level, status: 'LIVE', ...PATH_LESSON },
-      orderBy: { order: 'asc' },
-      include: { items: { where: { status: 'LIVE' }, select: { id: true } } },
-    });
-    if (!lessons.length) return null;
-
-    const completion = await this.session.lessonCompletion(userId, level);
-    // C2 mirror: keep in sync with SessionService.nextLesson — a LIVE
-    // lesson with zero LIVE items can never be completed, so it must never
-    // surface as "next lesson" here either (it would show a lesson the
-    // session engine will silently skip).
-    const next = lessons
-      .filter((l) => l.items.length > 0)
-      .find((l) => !completion.get(l.id));
-    if (!next) return null;
-
-    return {
-      id: next.id,
-      title: next.title,
-      topic: next.topic,
-      itemCount: next.items.length,
-    };
+  ): Promise<Omit<NextLessonView, 'xpEstimate'> | null> {
+    const { units } = await this.journey.get(userId);
+    for (const [i, u] of units.entries()) {
+      const step = u.steps.find((st) => st.state === 'now');
+      if (!step) continue;
+      return {
+        id: step.id,
+        title: step.title,
+        topic: u.title,
+        itemCount: step.itemCount,
+        estMinutes: step.chapter
+          ? step.chapter.estMinutes
+          : Math.ceil(step.itemCount * 0.75),
+        kind: step.kind === 'chapter' ? 'chapter' : 'lesson',
+        unit: { position: i + 1, title: u.title },
+        chapter: step.chapter
+          ? {
+              moduleSlug: step.chapter.moduleSlug,
+              chapterId: step.chapter.chapterId,
+              order: step.chapter.order,
+              position: step.chapter.position,
+            }
+          : null,
+      };
+    }
+    return null;
   }
 }

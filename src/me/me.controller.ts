@@ -79,7 +79,10 @@ export class MeController {
     if (body.soundOn !== undefined && typeof body.soundOn !== 'boolean') {
       throw new BadRequestException('soundOn harus boolean');
     }
-    if (body.voiceConsent !== undefined && typeof body.voiceConsent !== 'boolean') {
+    if (
+      body.voiceConsent !== undefined &&
+      typeof body.voiceConsent !== 'boolean'
+    ) {
       throw new BadRequestException('voiceConsent harus boolean');
     }
 

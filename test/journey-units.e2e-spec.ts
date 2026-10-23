@@ -295,4 +295,115 @@ describe('Perjalanan berbentuk unit (satu Perjalanan)', () => {
     const res = await get('/journey', u.token).expect(200);
     expect(res.body).toEqual({ units: [], done: 0, total: 0 });
   });
+
+  async function solve(userId: string, itemIds: string[]) {
+    const s = await prisma.session.create({
+      data: {
+        userId,
+        date: new Date('2026-10-01'),
+        kind: 'MODULE',
+        status: 'COMPLETED',
+      },
+    });
+    for (const itemId of itemIds)
+      await prisma.attempt.create({
+        data: {
+          userId,
+          itemId,
+          sessionId: s.id,
+          answer: 'A',
+          correct: true,
+          firstTry: true,
+        },
+      });
+  }
+
+  const nowStep = (body: any) => {
+    const i = body.units.findIndex((u: any) =>
+      u.steps.some((s: any) => s.state === 'now'),
+    );
+    return {
+      position: i + 1,
+      unit: body.units[i],
+      step: body.units[i].steps.find((s: any) => s.state === 'now'),
+    };
+  };
+
+  it('summary.nextLesson = langkah now di /journey (bab modul)', async () => {
+    const u = await user('nextch');
+    const j = await get('/journey', u.token).expect(200);
+    const now = nowStep(j.body);
+    const res = await get('/me/summary', u.token).expect(200);
+    expect(res.body.nextLesson).toMatchObject({
+      id: ids.a1,
+      kind: 'chapter',
+      title: 'Bab 1',
+      topic: `Modul ${slugA}`,
+      itemCount: 1,
+      estMinutes: 7,
+      unit: { position: now.position, title: `Modul ${slugA}` },
+      chapter: { moduleSlug: slugA, chapterId: ids.ch1, order: 1, position: 1 },
+    });
+    expect(now.step.id).toBe(ids.a1);
+  });
+
+  it('summary.nextLesson = langkah now di /journey (lesson)', async () => {
+    const u = await user('nextlesson');
+    await solve(u.id, [ids.a1Item, ids.a3Item]);
+    const j = await get('/journey', u.token).expect(200);
+    const now = nowStep(j.body);
+    const res = await get('/me/summary', u.token).expect(200);
+    expect(res.body.nextLesson).toMatchObject({
+      id: ids.c1,
+      kind: 'lesson',
+      topic,
+      unit: { position: now.position, title: topic },
+      chapter: null,
+    });
+    expect(now.step.id).toBe(ids.c1);
+  });
+
+  it('sesi MODULE terbuka tampil sebagai openSession', async () => {
+    const u = await user('openmod');
+    await request(app.getHttpServer())
+      .post('/session/module')
+      .set('Authorization', `Bearer ${u.token}`)
+      .send({ chapterId: ids.ch1 })
+      .expect(201);
+    const res = await get('/me/summary', u.token).expect(200);
+    expect(res.body.openSession).toMatchObject({
+      lessonTitle: 'Bab 1',
+      moduleChapterId: ids.ch1,
+      answered: 0,
+      total: 1,
+    });
+  });
+
+  it('sesi DAILY terbuka diutamakan atas MODULE', async () => {
+    const u = await user('opendaily');
+    await request(app.getHttpServer())
+      .post('/session/module')
+      .set('Authorization', `Bearer ${u.token}`)
+      .send({ chapterId: ids.ch1 })
+      .expect(201);
+    await request(app.getHttpServer())
+      .post('/session/today')
+      .set('Authorization', `Bearer ${u.token}`)
+      .expect(201);
+    const res = await get('/me/summary', u.token).expect(200);
+    expect(res.body.openSession.moduleChapterId).toBeNull();
+  });
+
+  it('summary tanpa moduleInProgress', async () => {
+    const u = await user('nomip');
+    const res = await get('/me/summary', u.token).expect(200);
+    expect(res.body).not.toHaveProperty('moduleInProgress');
+  });
+
+  it('user tanpa level → nextLesson null, contentExhausted true', async () => {
+    const u = await user('nolevelsum', null);
+    const res = await get('/me/summary', u.token).expect(200);
+    expect(res.body.nextLesson).toBeNull();
+    expect(res.body.contentExhausted).toBe(true);
+  });
 });

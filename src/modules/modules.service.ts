@@ -13,7 +13,6 @@ import type {
   ModuleCard,
   ModuleChapterRow,
   ModuleDetailView,
-  ModuleInProgressView,
   ModulesView,
 } from './modules.types';
 
@@ -97,28 +96,19 @@ export class ModulesService {
   }
 
   async list(userId: string): Promise<ModulesView> {
-    return (await this.compute(userId)).view;
-  }
-
-  /** Satu kali hitung untuk list() dan inProgressSummary() (Beranda memanggil tiap load). */
-  private async compute(userId: string) {
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
       select: { level: true },
     });
     const modules = await this.loadLive();
     const prog = await this.progressFor(userId, modules);
-    const rowsBySlug = new Map(
-      modules.map((m) => [m.slug, this.rows(m, prog)]),
-    );
-    const cards = modules.map((m) => this.card(m, rowsBySlug.get(m.slug)!));
+    const cards = modules.map((m) => this.card(m, this.rows(m, prog)));
     const inProgressSlug = await this.pickInProgress(userId, modules, cards);
-    const view: ModulesView = {
+    return {
       inProgress: cards.find((c) => c.slug === inProgressSlug) ?? null,
       forYou: cards.filter((c) => c.level === user.level),
       others: cards.filter((c) => c.level !== user.level),
     };
-    return { view, rowsBySlug };
   }
 
   /** Modul berjalan (≥1 bab selesai, belum semua) yang paling baru dikerjakan; seri → urutan modul. */
@@ -209,25 +199,5 @@ export class ModulesService {
       moduleSlug: m.slug,
       moduleTitle: m.title,
     };
-  }
-
-  async inProgressSummary(
-    userId: string,
-  ): Promise<ModuleInProgressView | null> {
-    const { view, rowsBySlug } = await this.compute(userId);
-    const m = view.inProgress;
-    if (!m) return null;
-    const next = rowsBySlug
-      .get(m.slug)!
-      .find((r) => r.kind === 'quiz' && !r.done);
-    return next
-      ? {
-          slug: m.slug,
-          title: m.title,
-          nextOrder: next.order,
-          nextPosition: next.position,
-          nextTitle: next.title,
-        }
-      : null;
   }
 }
