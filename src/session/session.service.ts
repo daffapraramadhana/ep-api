@@ -13,6 +13,18 @@ import { itemSpecs } from '../tts/content-specs';
 import { todayWIB } from '../common/wib';
 import { SessionItemView, SessionView } from './session.types';
 import { PATH_LESSON } from '../common/content-scope';
+import {
+  flattenPath,
+  groupPath,
+  PathLessonInput,
+  PathUnit,
+} from '../common/path-order';
+
+/** Lesson jalur + item LIVE-nya + tautan bab (untuk unit modul). */
+export type PathLesson = Lesson & {
+  items: { id: string }[];
+  moduleChapter: PathLessonInput['moduleChapter'];
+};
 
 /**
  * Hash a string into a uint32 seed (FNV-1a variant) so the same
@@ -49,7 +61,7 @@ export function seededShuffle<T>(arr: T[], seedString: string): T[] {
 export interface LessonProgress {
   /** item LIVE bila lesson LIVE; 0 bila lesson DRAFT/RETIRED */
   liveItemCount: number;
-  /** semua item LIVE pernah dijawab benar (definisi lessonCompletionInternal) */
+  /** semua item LIVE pernah dijawab benar (definisi path()) */
   done: boolean;
   /** akurasi percobaan pertama bila done, selain itu null */
   accuracy: number | null;
@@ -241,13 +253,9 @@ export class SessionService {
         throw new ConflictException('Pilih levelmu dulu di profil');
       }
 
-      const { lessons, map } = await this.lessonCompletionInternal(
-        userId,
-        user.level,
-        tx,
-      );
+      const { lessons, done } = await this.path(userId, user.level, tx);
       const incompleteIds = lessons
-        .filter((l) => l.items.length > 0 && !map.get(l.id))
+        .filter((l) => !done.get(l.id))
         .map((l) => l.id);
       if (incompleteIds.length === 0) {
         throw new ConflictException(
@@ -255,14 +263,20 @@ export class SessionService {
         );
       }
 
-      const items = await tx.item.findMany({
-        where: {
-          lessonId: { in: incompleteIds },
-          type: 'UCAPAN',
-          status: 'LIVE',
-        },
-        orderBy: [{ lesson: { order: 'asc' } }, { order: 'asc' }],
-      });
+      // Urutan jalur (unit → langkah), lalu urutan item di lesson.
+      const rank = new Map(incompleteIds.map((id, i) => [id, i]));
+      const items = (
+        await tx.item.findMany({
+          where: {
+            lessonId: { in: incompleteIds },
+            type: 'UCAPAN',
+            status: 'LIVE',
+          },
+        })
+      ).sort(
+        (a, b) =>
+          rank.get(a.lessonId)! - rank.get(b.lessonId)! || a.order - b.order,
+      );
       if (items.length === 0) {
         throw new ConflictException(
           'Belum ada latihan berbicara baru untuk levelmu',
@@ -456,12 +470,12 @@ export class SessionService {
     userId: string,
     level: Level,
   ): Promise<Map<string, boolean>> {
-    return (await this.lessonCompletionInternal(userId, level)).map;
+    return (await this.path(userId, level)).done;
   }
 
   /**
    * Progres per-lesson berdasarkan id (tidak difilter level/PATH_LESSON) —
-   * dipakai kuis bab modul. Definisi "done" identik lessonCompletionInternal.
+   * dipakai kuis bab modul. Definisi "done" identik path().
    */
   async completionForLessons(
     userId: string,
@@ -509,17 +523,36 @@ export class SessionService {
     return map;
   }
 
-  private async lessonCompletionInternal(
+  /**
+   * Perjalanan untuk `level`: lesson jalur (LIVE, ≥1 item LIVE) dikelompokkan
+   * & diurutkan oleh `groupPath` — SATU sumber urutan untuk /journey,
+   * Beranda, dan mesin sesi. `done` = semua item LIVE pernah dijawab benar.
+   * Satu query lesson + satu query attempt, tanpa N+1.
+   */
+  async path(
     userId: string,
     level: Level,
     db: Db = this.prisma,
-  ) {
-    const lessons = await db.lesson.findMany({
+  ): Promise<{
+    units: PathUnit<PathLesson>[];
+    lessons: PathLesson[];
+    done: Map<string, boolean>;
+  }> {
+    const rows = await db.lesson.findMany({
       where: { level, status: 'LIVE', ...PATH_LESSON },
-      orderBy: { order: 'asc' },
-      include: { items: { where: { status: 'LIVE' }, select: { id: true } } },
+      include: {
+        items: { where: { status: 'LIVE' }, select: { id: true } },
+        moduleChapter: {
+          select: {
+            order: true,
+            module: {
+              select: { id: true, slug: true, title: true, status: true },
+            },
+          },
+        },
+      },
     });
-    const itemIds = lessons.flatMap((l) => l.items.map((i) => i.id));
+    const itemIds = rows.flatMap((l) => l.items.map((i) => i.id));
     const correctAttempts = itemIds.length
       ? await db.attempt.findMany({
           where: { userId, itemId: { in: itemIds }, correct: true },
@@ -527,14 +560,15 @@ export class SessionService {
         })
       : [];
     const correctSet = new Set(correctAttempts.map((a) => a.itemId));
-    const map = new Map<string, boolean>();
-    for (const l of lessons) {
-      map.set(
+    const done = new Map<string, boolean>();
+    for (const l of rows) {
+      done.set(
         l.id,
         l.items.length > 0 && l.items.every((i) => correctSet.has(i.id)),
       );
     }
-    return { lessons, map };
+    const units = groupPath(rows);
+    return { units, lessons: flattenPath(units), done };
   }
 
   private async nextLesson(
@@ -543,21 +577,10 @@ export class SessionService {
   ): Promise<Lesson | null> {
     const user = await db.user.findUnique({ where: { id: userId } });
     if (!user?.level) return null;
-    const { lessons, map } = await this.lessonCompletionInternal(
-      userId,
-      user.level,
-      db,
-    );
-    // C2 fix: a LIVE lesson with zero LIVE items can never be completed
-    // (lessonCompletionInternal already maps it to `false`/not-done via
-    // `l.items.length > 0 && ...`), so without this filter it would be
-    // picked forever, assembling an empty session that permanently locks
-    // the user out of their daily session. Skip it and let the next
-    // (non-empty) lesson — or the reinforcement pool — take over.
-    return (
-      lessons.filter((l) => l.items.length > 0).find((l) => !map.get(l.id)) ??
-      null
-    );
+    // PATH_LESSON hanya memuat lesson dengan ≥1 item LIVE (C2: lesson kosong
+    // tak pernah bisa selesai dan akan mengunci sesi harian selamanya).
+    const { lessons, done } = await this.path(userId, user.level, db);
+    return lessons.find((l) => !done.get(l.id)) ?? null;
   }
 
   /**

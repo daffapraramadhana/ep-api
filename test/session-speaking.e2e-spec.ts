@@ -26,10 +26,10 @@ describe('POST /session/speaking (menu Berbicara)', () => {
   let speakingItemBId: string;
   const lessonS1ItemIds: string[] = []; // 2 UCAPAN + 1 PILIHAN_GANDA
   let nonSpeakingItemId: string;
-  // DB e2e = DB dev bersama (belum terisolasi, lihat backlog). Modul nyata yang
-  // ber-showInPath (mis. EFTL) menambah UCAPAN DASAR ke sesi berbicara —
-  // matikan selama file ini berjalan, pulihkan di afterAll.
-  let pathModuleIds: string[] = [];
+  // DB e2e = DB dev bersama (belum terisolasi, lihat backlog). Kuis bab modul
+  // LIVE nyata (mis. EFTL) ikut jalur dan menambah UCAPAN DASAR ke sesi
+  // berbicara — jadikan DRAFT selama file ini berjalan, pulihkan di afterAll.
+  let moduleLessonIds: string[] = [];
 
   function post(path: string, body: Record<string, unknown>, token: string) {
     return request(app.getHttpServer())
@@ -51,15 +51,18 @@ describe('POST /session/speaking (menu Berbicara)', () => {
     await app.init();
     prisma = app.get(PrismaService);
 
-    pathModuleIds = (
-      await prisma.module.findMany({
-        where: { showInPath: true },
+    moduleLessonIds = (
+      await prisma.lesson.findMany({
+        where: {
+          status: 'LIVE',
+          moduleChapter: { is: { module: { status: 'LIVE' } } },
+        },
         select: { id: true },
       })
-    ).map((m) => m.id);
-    await prisma.module.updateMany({
-      where: { id: { in: pathModuleIds } },
-      data: { showInPath: false },
+    ).map((l) => l.id);
+    await prisma.lesson.updateMany({
+      where: { id: { in: moduleLessonIds } },
+      data: { status: 'DRAFT' },
     });
 
     const passwordHash = await bcrypt.hash(PASSWORD, 10);
@@ -191,9 +194,9 @@ describe('POST /session/speaking (menu Berbicara)', () => {
   });
 
   afterAll(async () => {
-    await prisma.module.updateMany({
-      where: { id: { in: pathModuleIds } },
-      data: { showInPath: true },
+    await prisma.lesson.updateMany({
+      where: { id: { in: moduleLessonIds } },
+      data: { status: 'LIVE' },
     });
     await prisma.attempt.deleteMany({
       where: { user: { email: { startsWith: 'p2s-' } } },

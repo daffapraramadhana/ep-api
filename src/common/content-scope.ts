@@ -13,18 +13,12 @@ export const COUNTED_SESSION_KINDS: SessionKind[] = [
 ];
 
 /**
- * Lesson "jalur harian" = lesson yang TIDAK menjadi kuis bab modul LIVE,
- * kecuali modulnya ditandai `showInPath` (mis. modul EFTL: kuisnya juga
- * soal Perjalanan — progres sama, tanpa duplikat).
- * Lesson yang ditautkan ke modul DRAFT/RETIRED tetap di jalur — menyusun
- * modul tidak boleh diam-diam menarik konten dari Perjalanan karyawan.
- * Dipakai di semua query lesson untuk Perjalanan, perakitan sesi
- * harian/berbicara, penguatan, dan hitungan "materi selesai".
+ * Lesson "jalur" (Perjalanan, sesi harian/berbicara, penguatan, hitungan
+ * "materi selesai", monitoring) = lesson yang punya ≥1 item LIVE; selalu
+ * dipakai bersama `status: 'LIVE'`. Sejak spec satu-perjalanan semua modul
+ * LIVE ikut jalur (kuis babnya jadi unit modul) — tidak ada lagi pengecualian
+ * per-modul. Urutan langkah: `groupPath` (path-order.ts).
  */
 export const PATH_LESSON: Prisma.LessonWhereInput = {
-  OR: [
-    { moduleChapter: { is: null } },
-    { moduleChapter: { is: { module: { status: { not: 'LIVE' } } } } },
-    { moduleChapter: { is: { module: { showInPath: true } } } },
-  ],
+  items: { some: { status: 'LIVE' } },
 };

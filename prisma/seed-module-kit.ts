@@ -57,8 +57,6 @@ export type KitModule = {
   level: Level;
   cefr: Cefr;
   status: 'DRAFT' | 'LIVE';
-  /** kuis bab ikut Perjalanan & sesi harian (Module.showInPath) */
-  showInPath?: boolean;
   chapters: KitChapter[];
 };
 
@@ -204,7 +202,6 @@ export async function seedModule(def: KitModule) {
           cefr: def.cefr,
           order: (max._max.order ?? 0) + 1,
           status: def.status,
-          showInPath: def.showInPath ?? false,
         },
       });
       console.log(`Modul dibuat: ${mod.title}`);

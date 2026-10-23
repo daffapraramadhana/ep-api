@@ -6,8 +6,8 @@ import { parseChapter } from '../src/modules/chapter-parser';
 /**
  * Seed KONTEN — modul "Making & Handling Complaints" (MENENGAH·B1).
  * 11 bab, bab n menautkan lesson CMP-2xx yang dibuat seed-complaints.ts
- * (jalankan itu dulu). Akibatnya lesson CMP keluar dari Perjalanan — disengaja
- * (spec menu modul §9). Ungkapan diadaptasi dari modul SKKNI BHS.IS03.004.01;
+ * (jalankan itu dulu). Lesson CMP tampil di Perjalanan sebagai unit modul
+ * (spec satu-perjalanan; migrasi 20261023 menaruhnya di akhir MENENGAH). Ungkapan diadaptasi dari modul SKKNI BHS.IS03.004.01;
  * penjelasan & dialog ditulis ulang untuk konteks kerja umum, tidak disalin.
  *
  * Jalankan: `npm run seed:module-complaints`. CREATE-ONLY: modul (by slug) dan

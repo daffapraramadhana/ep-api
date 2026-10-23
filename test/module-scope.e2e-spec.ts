@@ -8,9 +8,9 @@ import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { todayWIB } from '../src/common/wib';
 
-// Lesson yang ditautkan ke bab modul TIDAK boleh muncul di jalur harian
-// (journey, sesi harian, sesi berbicara, next lesson Beranda), dan sesi
-// MODULE COMPLETED dihitung ke target harian. Order negatif supaya lesson
+// Spec satu-perjalanan: lesson bab modul LIVE IKUT jalur harian (journey,
+// sesi harian, sesi berbicara, penguatan, next lesson Beranda) dengan urutan
+// bab; sesi MODULE COMPLETED dihitung ke target harian. Order negatif supaya lesson
 // tes selalu paling depan meski DB dev berisi lesson lain di level ini.
 // Prefix MSC- / msc-.
 const PASSWORD = 'Password123!';
@@ -161,9 +161,9 @@ describe('cakupan modul (PATH_LESSON & COUNTED_SESSION_KINDS)', () => {
       },
     });
     userId2 = u2.id;
-    // User 3: semua lesson jalur tuntas → sesi harian jatuh ke penguatan.
-    // Item lesson bab LIVE pernah dijawab SALAH (prioritas tertinggi penguatan
-    // seandainya tidak dikecualikan).
+    // User 3: semua lesson tuntas → sesi harian jatuh ke penguatan. Item
+    // lesson bab LIVE pernah dijawab SALAH lalu benar (prioritas tertinggi
+    // penguatan — kini boleh ikut).
     const u3 = await prisma.user.create({
       data: {
         name: 'MSC3',
@@ -186,6 +186,7 @@ describe('cakupan modul (PATH_LESSON & COUNTED_SESSION_KINDS)', () => {
       ...pathItemIds.map((id) => [id, true] as const),
       ...draftL.ids.map((id) => [id, true] as const),
       ...moduleItemIds.map((id) => [id, false] as const),
+      ...moduleItemIds.map((id) => [id, true] as const),
     ]) {
       await prisma.attempt.create({
         data: {
@@ -194,7 +195,7 @@ describe('cakupan modul (PATH_LESSON & COUNTED_SESSION_KINDS)', () => {
           sessionId: past.id,
           answer: 'x',
           correct,
-          firstTry: true,
+          firstTry: !(moduleItemIds.includes(itemId) && correct),
         },
       });
     }
@@ -228,32 +229,36 @@ describe('cakupan modul (PATH_LESSON & COUNTED_SESSION_KINDS)', () => {
     await app.close();
   });
 
-  it('/journey tidak memuat lesson milik bab', async () => {
+  it('/journey memuat lesson bab modul LIVE', async () => {
     const res = await get('/journey', token).expect(200);
     const ids = res.body.topics.flatMap((t: any) =>
       t.lessons.map((l: any) => l.id),
     );
     expect(ids).toContain(pathLessonId);
-    expect(ids).not.toContain(moduleLessonId);
+    expect(ids).toContain(moduleLessonId);
   });
 
-  it('summary.nextLesson = lesson jalur, bukan lesson bab', async () => {
+  it('summary.nextLesson = lesson bab modul bila itu langkah berikutnya', async () => {
     const res = await get('/me/summary', token).expect(200);
-    expect(res.body.nextLesson.id).toBe(pathLessonId);
+    expect(res.body.nextLesson.id).toBe(moduleLessonId);
   });
 
-  it('sesi harian memakai lesson jalur', async () => {
+  it('sesi harian memakai lesson bab modul LIVE bila itu langkah berikutnya', async () => {
     const res = await post('/session/today', token).expect(201);
     const ids = res.body.items.map((i: any) => i.itemId);
-    expect(ids).toEqual(expect.arrayContaining(pathItemIds));
-    expect(ids.some((id: string) => moduleItemIds.includes(id))).toBe(false);
+    expect(ids).toEqual(expect.arrayContaining(moduleItemIds));
+    expect(ids.some((id: string) => pathItemIds.includes(id))).toBe(false);
   });
 
-  it('sesi berbicara tidak memuat UCAPAN dari lesson bab', async () => {
+  it('sesi berbicara memuat UCAPAN dari lesson bab modul LIVE', async () => {
     const res = await post('/session/speaking', token).expect(201);
     const ids = res.body.items.map((i: any) => i.itemId);
     expect(ids).toContain(pathItemIds[1]);
-    expect(ids).not.toContain(moduleItemIds[1]);
+    expect(ids).toContain(moduleItemIds[1]);
+    // urutan jalur: unit modul (order -1000) sebelum unit topik
+    expect(ids.indexOf(moduleItemIds[1])).toBeLessThan(
+      ids.indexOf(pathItemIds[1]),
+    );
   });
 
   it('sesi MODULE COMPLETED hari ini dihitung ke target harian', async () => {
@@ -279,11 +284,92 @@ describe('cakupan modul (PATH_LESSON & COUNTED_SESSION_KINDS)', () => {
     expect(ids).toContain(draftLinkedLessonId);
   });
 
-  it('penguatan tidak memuat item lesson bab modul LIVE', async () => {
+  it('penguatan boleh memuat item lesson bab modul LIVE', async () => {
     const res = await post('/session/today', token3).expect(201);
     const ids = res.body.items.map((i: any) => i.itemId);
     expect(res.body.items.every((i: any) => i.source === 'REVIEW')).toBe(true);
-    expect(ids).toEqual(expect.arrayContaining(pathItemIds));
-    expect(ids.some((id: string) => moduleItemIds.includes(id))).toBe(false);
+    expect(ids).toEqual(expect.arrayContaining(moduleItemIds));
+  });
+
+  it('mesin sesi mengikuti urutan bab, bukan Lesson.order', async () => {
+    // Modul kedua di depan semuanya: bab 1 → lesson order -1500, bab 2 →
+    // lesson order -2000 (Lesson.order terbalik dari urutan bab).
+    const mkL = async (code: string, order: number) => {
+      const l = await prisma.lesson.create({
+        data: {
+          code: `MSC-${code}-${stamp}`,
+          title: `MSC ${code}`,
+          topic: 'MSC ORD',
+          level: 'MAHIR',
+          cefr: 'C1',
+          skill: 'READING',
+          order,
+          status: 'LIVE',
+        },
+      });
+      const it = await prisma.item.create({
+        data: {
+          lessonId: l.id,
+          type: 'PILIHAN_GANDA',
+          prompt: 'p',
+          options: ['A', 'B', 'C', 'D'],
+          answerKey: 'A',
+          explanation: 'e',
+          order: 1,
+          status: 'LIVE',
+        },
+      });
+      return { l, itemId: it.id };
+    };
+    const ch1 = await mkL('ORD1', -1500);
+    const ch2 = await mkL('ORD2', -2000);
+    const m = await prisma.module.create({
+      data: {
+        slug: `msc-o-${stamp}`,
+        title: 'MSC Urutan',
+        summary: 's',
+        level: 'MAHIR',
+        cefr: 'C1',
+        order: 3,
+        status: 'LIVE',
+      },
+    });
+    for (const [order, l] of [
+      [1, ch1.l],
+      [2, ch2.l],
+    ] as const) {
+      await prisma.moduleChapter.create({
+        data: {
+          moduleId: m.id,
+          order,
+          title: `Bab ${order}`,
+          estMinutes: 5,
+          body: 'x',
+          blocks: [],
+          lessonId: l.id,
+        },
+      });
+    }
+    const passwordHash = await bcrypt.hash(PASSWORD, 10);
+    const u = await prisma.user.create({
+      data: {
+        name: 'MSC4',
+        email: `msc-d-${stamp}@ex.com`,
+        role: 'USER',
+        level: 'MAHIR',
+        passwordHash,
+        inviteStatus: 'ACCEPTED',
+      },
+    });
+    const t = (
+      await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email: u.email, password: PASSWORD })
+        .expect(201)
+    ).body.accessToken as string;
+    const res = await post('/session/today', t).expect(201);
+    const ids = res.body.items.map((i: any) => i.itemId);
+    expect(ids).toContain(ch1.itemId);
+    expect(ids).not.toContain(ch2.itemId);
   });
 });
